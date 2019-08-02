@@ -1,0 +1,687 @@
+\documentclass{article}
+\usepackage[nottoc,numbib]{tocbibind}
+\usepackage{Sweave}
+\usepackage{color}
+\usepackage{amsmath}
+\usepackage{mathtools}
+\usepackage{rotating}
+\usepackage{multirow}
+\usepackage{amscd}
+\usepackage[tableposition=top]{caption}
+\usepackage{ifthen}
+\usepackage[utf8]{inputenc}
+
+
+\renewcommand{\rmdefault}{phv} % Arial font
+\renewcommand{\sfdefault}{phv} % Arial font
+\usepackage[left=1in,top=1in,right=1in,bottom=1in]{geometry} %margins
+\usepackage{longtable}
+\setlength{\parindent}{0in}
+\usepackage{graphicx}
+\usepackage{pdflscape}
+\usepackage{lscape}
+
+\usepackage{lastpage} % for the number of the last page in the document
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+
+\rhead{Section \thesubsection}
+\rfoot{Page \thepage\ of \pageref{LastPage}}
+\usepackage{verbatim}
+
+\begin{document}
+
+\pagebreak[4]
+
+<<loadpackages>>=
+
+r.lib <- "drworkflow_Rlib"
+
+require (EvansData, lib.loc=r.lib)
+require (EvansAnalysis, lib.loc=r.lib)
+require (SJHMGEData, lib.loc=r.lib)
+require (xtable, lib.loc=r.lib)
+
+require (mvtnorm, lib.loc=r.lib)
+require (modeltools, lib.loc=r.lib)
+require (coin, lib.loc=r.lib)
+
+require (mvtnorm, lib.loc=r.lib)
+require (VGAM, lib.loc=r.lib)
+require (lawstat, lib.loc=r.lib)
+require (KernSmooth, lib.loc=r.lib)
+
+require (gtools, lib.loc=r.lib)
+require (gdata, lib.loc=r.lib)
+require (bitops, lib.loc=r.lib)
+require (caTools, lib.loc=r.lib)
+require (gplots, lib.loc=r.lib)
+require (amap, lib.loc=r.lib)
+require (survival, lib.loc=r.lib)
+
+@
+
+
+<<drugselect, cache=TRUE>>=
+wd <- getwd()
+wdsplit <- unlist (strsplit (wd, "/"))
+drug <- wdsplit[length(wdsplit)]
+drug
+@ 
+
+<<mttprep, cache=TRUE>>=
+mtt.select <- mtt.prep(drug)
+source("drugcatadjust.R")
+@
+
+
+\pagebreak[4]
+
+<<totxvanalysis, cache=TRUE>>=
+rownames(mtt.select) <- mtt.select$MRN
+mtt.select.totxv.bt <- subset (mtt.select, mtt.select$PROT == "TOTXV")
+mtt.select.totxv.b <- subset (mtt.select.totxv.bt, mtt.select.totxv.bt$LIN == "B")
+mtt.select.totxv.t <- subset (mtt.select.totxv.bt, mtt.select.totxv.bt$LIN == "T")
+
+sj.ge.data.totxv <- stjude.dxbm.hm.mas5.probe.log2
+
+pt.int.totxv.bt <- intersect (mtt.select.totxv.bt$MRN, colnames(sj.ge.data.totxv))
+pt.int.totxv.b <- intersect (mtt.select.totxv.b$MRN, colnames(sj.ge.data.totxv))
+pt.int.totxv.t <- intersect (mtt.select.totxv.t$MRN, colnames(sj.ge.data.totxv))
+
+mtt.select.totxv.bt <- mtt.select.totxv.bt[as.character(pt.int.totxv.bt),]
+mtt.select.totxv.b <- mtt.select.totxv.b[as.character(pt.int.totxv.b),]
+mtt.select.totxv.t <- mtt.select.totxv.t[as.character(pt.int.totxv.t),]
+
+sj.ge.data.totxv.bt <- sj.ge.data.totxv[,as.character(pt.int.totxv.bt)]
+sj.ge.data.totxv.b <- sj.ge.data.totxv[,as.character(pt.int.totxv.b)]
+sj.ge.data.totxv.t <- sj.ge.data.totxv[,as.character(pt.int.totxv.t)]
+@ 
+
+
+<<totxv.lm.bt, cache=TRUE>>=
+totxv.lm.bt <- t(apply(sj.ge.data.totxv.bt, 1, function(x){summary(lm(log2(mtt.select.totxv.bt$LC50)~x))$coef}[2,3:4]))
+
+totxv.lm.bt <- as.data.frame(totxv.lm.bt, as.is=TRUE, stringsAsFactors=FALSE)
+totxv.lm.bt$Probe.Set.ID <- rownames(totxv.lm.bt)
+totxv.lm.bt <- totxv.lm.bt[,3:1]
+colnames (totxv.lm.bt) <- c("Probe.Set.ID", "totxv.lm.p.bt", "totxv.lm.stat.bt")
+@ 
+
+<<totxv.lm.b, cache=TRUE>>=
+totxv.lm.b <- t(apply(sj.ge.data.totxv.b, 1, function(x){summary(lm(log2(mtt.select.totxv.b$LC50)~x))$coef}[2,3:4]))
+
+totxv.lm.b <- as.data.frame(totxv.lm.b, as.is=TRUE, stringsAsFactors=FALSE)
+totxv.lm.b$Probe.Set.ID <- rownames(totxv.lm.b)
+totxv.lm.b <- totxv.lm.b[,3:1]
+colnames (totxv.lm.b) <- c("Probe.Set.ID", "totxv.lm.p.b", "totxv.lm.stat.b")
+@ 
+
+
+<<totxv.lm.t, cache=TRUE>>=
+totxv.lm.t <- t(apply(sj.ge.data.totxv.t, 1, function(x){summary(lm(log2(mtt.select.totxv.t$LC50)~x))$coef}[2,3:4]))
+
+totxv.lm.t <- as.data.frame(totxv.lm.t, as.is=TRUE, stringsAsFactors=FALSE)
+totxv.lm.t$Probe.Set.ID <- rownames(totxv.lm.t)
+totxv.lm.t <- totxv.lm.t[,3:1]
+colnames (totxv.lm.t) <- c("Probe.Set.ID", "totxv.lm.p.t", "totxv.lm.stat.t")
+@ 
+
+<<totxv.t.bt, cache=TRUE>>=
+totxv.t.bt <- do.call(rbind, apply(sj.ge.data.totxv.bt, 1, function(x){t.test(x[mtt.select.totxv.bt$LC50.GROUP==3],x[mtt.select.totxv.bt$LC50.GROUP==1], na.action=na.rm)}[c("p.value", "statistic")]))
+
+totxv.t.bt <- as.data.frame (totxv.t.bt, as.is=TRUE, stringsAsFactors=FALSE)
+totxv.t.bt$p.value <- unlist (totxv.t.bt$p.value)
+totxv.t.bt$statistic <- unlist (totxv.t.bt$statistic)
+
+totxv.t.bt$Probe.Set.ID <- rownames (totxv.t.bt)
+totxv.t.bt <- totxv.t.bt[,c("Probe.Set.ID", "p.value", "statistic")]
+colnames (totxv.t.bt) <- c("Probe.Set.ID", "totxv.t.p.bt", "totxv.t.stat.bt")
+@ 
+
+<<totxv.t.b, cache=TRUE>>=
+totxv.t.b <- do.call(rbind, apply(sj.ge.data.totxv.b, 1, function(x){t.test(x[mtt.select.totxv.b$LC50.GROUP==3],x[mtt.select.totxv.b$LC50.GROUP==1], na.action=na.rm)}[c("p.value", "statistic")]))
+
+totxv.t.b <- as.data.frame (totxv.t.b, as.is=TRUE, stringsAsFactors=FALSE)
+totxv.t.b$p.value <- unlist (totxv.t.b$p.value)
+totxv.t.b$statistic <- unlist (totxv.t.b$statistic)
+totxv.t.b$Probe.Set.ID <- rownames (totxv.t.b)
+totxv.t.b <- totxv.t.b[,c("Probe.Set.ID", "p.value", "statistic")]
+colnames (totxv.t.b) <- c("Probe.Set.ID", "totxv.t.p.b", "totxv.t.stat.b")
+
+@ 
+
+
+<<totxv.t.t, cache=TRUE>>=
+totxv.t.t <- do.call(rbind, apply(sj.ge.data.totxv.t, 1, function(x){t.test(x[mtt.select.totxv.t$LC50.GROUP==3],x[mtt.select.totxv.t$LC50.GROUP==1], na.action=na.rm)}[c("p.value", "statistic")]))
+
+totxv.t.t <- as.data.frame (totxv.t.t, as.is=TRUE, stringsAsFactors=FALSE)
+totxv.t.t$p.value <- unlist (totxv.t.t$p.value)
+totxv.t.t$statistic <- unlist (totxv.t.t$statistic)
+totxv.t.t$Probe.Set.ID <- rownames (totxv.t.t)
+totxv.t.t <- totxv.t.t[,c("Probe.Set.ID", "p.value", "statistic")]
+colnames (totxv.t.t) <- c("Probe.Set.ID", "totxv.t.p.t", "totxv.t.stat.t")
+
+@ 
+
+
+
+<<totxv.w.bt, cache=TRUE>>=
+totxv.w.p.bt <- rep (NA, times=nrow(sj.ge.data.totxv.bt))
+totxv.w.stat.bt <- rep (NA, times=nrow(sj.ge.data.totxv.bt))
+
+for (i in 1:nrow(sj.ge.data.totxv.bt)){
+  result <- wilcox_test(unlist(sj.ge.data.totxv.bt[i,mtt.select.totxv.bt$LC50.GROUP %in% c(1,3)])~factor(mtt.select.totxv.bt[mtt.select.totxv.bt$LC50.GROUP%in% c(1,3),"LC50.GROUP"], levels=c(3,1)), distribution="exact")
+  totxv.w.p.bt[i]  <- pvalue (result)
+  totxv.w.stat.bt[i] <- statistic (result)
+}
+
+totxv.w.bt <- cbind (Probe.Set.ID=rownames (sj.ge.data.totxv.bt), totxv.w.p.bt, totxv.w.stat.bt)
+totxv.w.bt <- as.data.frame (totxv.w.bt, as.is=TRUE, stringsAsFactors=FALSE)
+totxv.w.bt$totxv.w.p.bt <- as.numeric(totxv.w.bt$totxv.w.p.bt)
+totxv.w.bt$totxv.w.stat.bt <- as.numeric(totxv.w.bt$totxv.w.stat.bt)
+
+@ 
+
+
+<<totxv.w.b, cache=TRUE>>=
+totxv.w.p.b <- rep (NA, times=nrow(sj.ge.data.totxv.b))
+totxv.w.stat.b <- rep (NA, times=nrow(sj.ge.data.totxv.b))
+
+for (i in 1:nrow(sj.ge.data.totxv.b)){
+  result <- wilcox_test(unlist(sj.ge.data.totxv.b[i,mtt.select.totxv.b$LC50.GROUP %in% c(1,3)])~factor(mtt.select.totxv.b[mtt.select.totxv.b$LC50.GROUP%in% c(1,3),"LC50.GROUP"], levels=c(3,1)), distribution="exact")
+  totxv.w.p.b[i]  <- pvalue (result)
+  totxv.w.stat.b[i] <- statistic (result)
+}
+
+totxv.w.b <- cbind (Probe.Set.ID=rownames (sj.ge.data.totxv.b), totxv.w.p.b, totxv.w.stat.b)
+totxv.w.b <- as.data.frame (totxv.w.b, as.is=TRUE, stringsAsFactors=FALSE)
+totxv.w.b$totxv.w.p.b <- as.numeric(totxv.w.b$totxv.w.p.b)
+totxv.w.b$totxv.w.stat.b <- as.numeric(totxv.w.b$totxv.w.stat.b)
+
+@ 
+
+<<totxv.w.t, cache=TRUE>>=
+totxv.w.p.t <- rep (NA, times=nrow(sj.ge.data.totxv.t))
+totxv.w.stat.t <- rep (NA, times=nrow(sj.ge.data.totxv.t))
+
+for (i in 1:nrow(sj.ge.data.totxv.t)){
+  result <- wilcox_test(unlist(sj.ge.data.totxv.t[i,mtt.select.totxv.t$LC50.GROUP %in% c(1,3)])~factor(mtt.select.totxv.t[mtt.select.totxv.t$LC50.GROUP%in% c(1,3),"LC50.GROUP"], levels=c(3,1)), distribution="exact")
+  totxv.w.p.t[i]  <- pvalue (result)
+  totxv.w.stat.t[i] <- statistic (result)
+}
+
+totxv.w.t <- cbind (Probe.Set.ID=rownames (sj.ge.data.totxv.t), totxv.w.p.t, totxv.w.stat.t)
+totxv.w.t <- as.data.frame (totxv.w.t, as.is=TRUE, stringsAsFactors=FALSE)
+totxv.w.t$totxv.w.p.t <- as.numeric(totxv.w.t$totxv.w.p.t)
+totxv.w.t$totxv.w.stat.t <- as.numeric(totxv.w.t$totxv.w.stat.t)
+
+@ 
+
+
+
+<<mergetotxv, cache=TRUE>>=
+totxv.result.bt <- merge (totxv.t.bt, totxv.w.bt)
+totxv.result.bt <- merge (totxv.result.bt, totxv.lm.bt)
+
+totxv.result.b <- merge (totxv.t.b, totxv.w.b)
+totxv.result.b <- merge (totxv.result.b, totxv.lm.b)
+
+totxv.result.t <- merge (totxv.t.t, totxv.w.t)
+totxv.result.t <- merge (totxv.result.t, totxv.lm.t)
+
+totxv.result <- merge (totxv.result.bt, totxv.result.b)
+totxv.result <- merge (totxv.result, totxv.result.t)
+  
+write.table(totxv.result, file="totxv_ge_lc50.tsv", row.names=FALSE, quote=FALSE, sep="\t") 
+@ 
+
+
+<<totxvianalysis, cache=TRUE>>=
+rownames(mtt.select) <- mtt.select$MRN
+
+mtt.select.totxvi.bt <- subset (mtt.select, mtt.select$PROT == "TOTXVI")
+mtt.select.totxvi.b <- subset (mtt.select.totxvi.bt, mtt.select.totxvi.bt$LIN == "B")
+mtt.select.totxvi.t <- subset (mtt.select.totxvi.bt, mtt.select.totxvi.bt$LIN == "T")
+
+sj.ge.data.totxvi <- stjude.dxbm.xvi.mas5.probe.log2
+
+pt.int.totxvi.bt <- intersect (mtt.select.totxvi.bt$MRN, colnames(sj.ge.data.totxvi))
+pt.int.totxvi.b <- intersect (mtt.select.totxvi.b$MRN, colnames(sj.ge.data.totxvi))
+pt.int.totxvi.t <- intersect (mtt.select.totxvi.t$MRN, colnames(sj.ge.data.totxvi))
+
+mtt.select.totxvi.bt <- mtt.select.totxvi.bt[as.character(pt.int.totxvi.bt),]
+mtt.select.totxvi.b <- mtt.select.totxvi.b[as.character(pt.int.totxvi.b),]
+mtt.select.totxvi.t <- mtt.select.totxvi.t[as.character(pt.int.totxvi.t),]
+
+sj.ge.data.totxvi.bt <- sj.ge.data.totxvi[,as.character(pt.int.totxvi.bt)]
+sj.ge.data.totxvi.b <- sj.ge.data.totxvi[,as.character(pt.int.totxvi.b)]
+sj.ge.data.totxvi.t <- sj.ge.data.totxvi[,as.character(pt.int.totxvi.t)]
+
+@ 
+
+
+<<totxvi.lm.bt, cache=TRUE>>=
+totxvi.lm.bt <- t(apply(sj.ge.data.totxvi.bt, 1, function(x){summary(lm(log2(mtt.select.totxvi.bt$LC50)~x))$coef}[2,3:4]))
+
+totxvi.lm.bt <- as.data.frame(totxvi.lm.bt, as.is=TRUE, stringsAsFactors=FALSE)
+totxvi.lm.bt$Probe.Set.ID <- rownames(totxvi.lm.bt)
+totxvi.lm.bt <- totxvi.lm.bt[,3:1]
+colnames (totxvi.lm.bt) <- c("Probe.Set.ID", "totxvi.lm.p.bt", "totxvi.lm.stat.bt")
+@ 
+
+<<totxvi.lm.b, cache=TRUE>>=
+totxvi.lm.b <- t(apply(sj.ge.data.totxvi.b, 1, function(x){summary(lm(log2(mtt.select.totxvi.b$LC50)~x))$coef}[2,3:4]))
+
+totxvi.lm.b <- as.data.frame(totxvi.lm.b, as.is=TRUE, stringsAsFactors=FALSE)
+totxvi.lm.b$Probe.Set.ID <- rownames(totxvi.lm.b)
+totxvi.lm.b <- totxvi.lm.b[,3:1]
+colnames (totxvi.lm.b) <- c("Probe.Set.ID", "totxvi.lm.p.b", "totxvi.lm.stat.b")
+@ 
+
+<<totxvi.lm.t, cache=TRUE>>=
+totxvi.lm.t <- t(apply(sj.ge.data.totxvi.t, 1, function(x){summary(lm(log2(mtt.select.totxvi.t$LC50)~x))$coef}[2,3:4]))
+
+totxvi.lm.t <- as.data.frame(totxvi.lm.t, as.is=TRUE, stringsAsFactors=FALSE)
+totxvi.lm.t$Probe.Set.ID <- rownames(totxvi.lm.t)
+totxvi.lm.t <- totxvi.lm.t[,3:1]
+colnames (totxvi.lm.t) <- c("Probe.Set.ID", "totxvi.lm.p.t", "totxvi.lm.stat.t")
+@ 
+
+
+<<totxvi.t.bt, cache=TRUE>>=
+totxvi.t.bt <- do.call(rbind, apply(sj.ge.data.totxvi.bt, 1, function(x){t.test(x[mtt.select.totxvi.bt$LC50.GROUP==3],x[mtt.select.totxvi.bt$LC50.GROUP==1], na.action=na.rm)}[c("p.value", "statistic")]))
+
+totxvi.t.bt <- as.data.frame (totxvi.t.bt, as.is=TRUE, stringsAsFactors=FALSE)
+totxvi.t.bt$p.value <- unlist (totxvi.t.bt$p.value)
+totxvi.t.bt$statistic <- unlist (totxvi.t.bt$statistic)
+
+totxvi.t.bt$Probe.Set.ID <- rownames (totxvi.t.bt)
+totxvi.t.bt <- totxvi.t.bt[,c("Probe.Set.ID", "p.value", "statistic")]
+colnames (totxvi.t.bt) <- c("Probe.Set.ID", "totxvi.t.p.bt", "totxvi.t.stat.bt")
+@ 
+
+<<totxvi.t.b, cache=TRUE>>=
+totxvi.t.b <- do.call(rbind, apply(sj.ge.data.totxvi.b, 1, function(x){t.test(x[mtt.select.totxvi.b$LC50.GROUP==3],x[mtt.select.totxvi.b$LC50.GROUP==1], na.action=na.rm)}[c("p.value", "statistic")]))
+
+totxvi.t.b <- as.data.frame (totxvi.t.b, as.is=TRUE, stringsAsFactors=FALSE)
+totxvi.t.b$p.value <- unlist (totxvi.t.b$p.value)
+totxvi.t.b$statistic <- unlist (totxvi.t.b$statistic)
+totxvi.t.b$Probe.Set.ID <- rownames (totxvi.t.b)
+totxvi.t.b <- totxvi.t.b[,c("Probe.Set.ID", "p.value", "statistic")]
+colnames (totxvi.t.b) <- c("Probe.Set.ID", "totxvi.t.p.b", "totxvi.t.stat.b")
+@ 
+
+
+<<totxvi.t.t, cache=TRUE>>=
+totxvi.t.t <- do.call(rbind, apply(sj.ge.data.totxvi.t, 1, function(x){t.test(x[mtt.select.totxvi.t$LC50.GROUP==3],x[mtt.select.totxvi.t$LC50.GROUP==1], na.action=na.rm)}[c("p.value", "statistic")]))
+
+totxvi.t.t <- as.data.frame (totxvi.t.t, as.is=TRUE, stringsAsFactors=FALSE)
+totxvi.t.t$p.value <- unlist (totxvi.t.t$p.value)
+totxvi.t.t$statistic <- unlist (totxvi.t.t$statistic)
+totxvi.t.t$Probe.Set.ID <- rownames (totxvi.t.t)
+totxvi.t.t <- totxvi.t.t[,c("Probe.Set.ID", "p.value", "statistic")]
+colnames (totxvi.t.t) <- c("Probe.Set.ID", "totxvi.t.p.t", "totxvi.t.stat.t")
+@ 
+
+
+<<totxvi.w.bt, cache=TRUE>>=
+totxvi.w.p.bt <- rep (NA, times=nrow(sj.ge.data.totxvi.bt))
+totxvi.w.stat.bt <- rep (NA, times=nrow(sj.ge.data.totxvi.bt))
+
+for (i in 1:nrow(sj.ge.data.totxvi.bt)){
+  result <- wilcox_test(unlist(sj.ge.data.totxvi.bt[i,mtt.select.totxvi.bt$LC50.GROUP %in% c(1,3)])~factor(mtt.select.totxvi.bt[mtt.select.totxvi.bt$LC50.GROUP%in% c(1,3),"LC50.GROUP"], levels=c(3,1)), distribution="exact")
+  totxvi.w.p.bt[i]  <- pvalue (result)
+  totxvi.w.stat.bt[i] <- statistic (result)
+}
+
+totxvi.w.bt <- cbind (Probe.Set.ID=rownames (sj.ge.data.totxvi.bt), totxvi.w.p.bt, totxvi.w.stat.bt)
+totxvi.w.bt <- as.data.frame (totxvi.w.bt, as.is=TRUE, stringsAsFactors=FALSE)
+totxvi.w.bt$totxvi.w.p.bt <- as.numeric(totxvi.w.bt$totxvi.w.p.bt)
+totxvi.w.bt$totxvi.w.stat.bt <- as.numeric(totxvi.w.bt$totxvi.w.stat.bt)
+
+@ 
+
+
+
+<<totxvi.w.b, cache=TRUE>>=
+totxvi.w.p.b <- rep (NA, times=nrow(sj.ge.data.totxvi.b))
+totxvi.w.stat.b <- rep (NA, times=nrow(sj.ge.data.totxvi.b))
+
+for (i in 1:nrow(sj.ge.data.totxvi.b)){
+  result <- wilcox_test(unlist(sj.ge.data.totxvi.b[i,mtt.select.totxvi.b$LC50.GROUP %in% c(1,3)])~factor(mtt.select.totxvi.b[mtt.select.totxvi.b$LC50.GROUP%in% c(1,3),"LC50.GROUP"], levels=c(3,1)), distribution="exact")
+  totxvi.w.p.b[i]  <- pvalue (result)
+  totxvi.w.stat.b[i] <- statistic (result)
+}
+
+totxvi.w.b <- cbind (Probe.Set.ID=rownames (sj.ge.data.totxvi.b), totxvi.w.p.b, totxvi.w.stat.b)
+totxvi.w.b <- as.data.frame (totxvi.w.b, as.is=TRUE, stringsAsFactors=FALSE)
+totxvi.w.b$totxvi.w.p.b <- as.numeric(totxvi.w.b$totxvi.w.p.b)
+totxvi.w.b$totxvi.w.stat.b <- as.numeric(totxvi.w.b$totxvi.w.stat.b)
+
+@ 
+
+
+<<totxvi.w.t, cache=TRUE>>=
+totxvi.w.p.t <- rep (NA, times=nrow(sj.ge.data.totxvi.t))
+totxvi.w.stat.t <- rep (NA, times=nrow(sj.ge.data.totxvi.t))
+
+for (i in 1:nrow(sj.ge.data.totxvi.t)){
+  result <- wilcox_test(unlist(sj.ge.data.totxvi.t[i,mtt.select.totxvi.t$LC50.GROUP %in% c(1,3)])~factor(mtt.select.totxvi.t[mtt.select.totxvi.t$LC50.GROUP%in% c(1,3),"LC50.GROUP"], levels=c(3,1)), distribution="exact")
+  totxvi.w.p.t[i]  <- pvalue (result)
+  totxvi.w.stat.t[i] <- statistic (result)
+}
+
+totxvi.w.t <- cbind (Probe.Set.ID=rownames (sj.ge.data.totxvi.t), totxvi.w.p.t, totxvi.w.stat.t)
+totxvi.w.t <- as.data.frame (totxvi.w.t, as.is=TRUE, stringsAsFactors=FALSE)
+totxvi.w.t$totxvi.w.p.t <- as.numeric(totxvi.w.t$totxvi.w.p.t)
+totxvi.w.t$totxvi.w.stat.t <- as.numeric(totxvi.w.t$totxvi.w.stat.t)
+
+@ 
+
+
+<<mergetotxvi, cache=TRUE>>=
+totxvi.result.bt <- merge (totxvi.t.bt, totxvi.w.bt)
+totxvi.result.bt <- merge (totxvi.result.bt, totxvi.lm.bt)
+
+totxvi.result.b <- merge (totxvi.t.b, totxvi.w.b)
+totxvi.result.b <- merge (totxvi.result.b, totxvi.lm.b)
+
+totxvi.result.t <- merge (totxvi.t.t, totxvi.w.t)
+totxvi.result.t <- merge (totxvi.result.t, totxvi.lm.t)
+
+totxvi.result <- merge (totxvi.result.bt, totxvi.result.b)
+totxvi.result <- merge (totxvi.result, totxvi.result.t)
+ 
+write.table (totxvi.result, file="totxvi_ge_lc50.tsv", row.names=FALSE, quote=FALSE, sep="\t") 
+
+@ 
+
+
+
+<<all.lm.bt, cache=TRUE>>=
+
+if (drug %in% c("PRED", "LASP", "VCR", "6MP", "6TG")){
+common.probes <- intersect(rownames(sj.ge.data.totxv.bt), rownames (sj.ge.data.totxvi.bt))
+#common.probes <- intersect(common.probes, rownames (nl.signal.bt))
+
+all.ge.bt <- cbind (sj.ge.data.totxv.bt[common.probes,], sj.ge.data.totxvi.bt[common.probes,])
+all.pheno.bt <- c(mtt.select.totxv.bt$LC50, mtt.select.totxvi.bt$LC50)
+all.prot.bt <- as.factor(c(rep("TOTXV", times=length(mtt.select.totxv.bt$LC50)), rep("TOTXVI", times=length(mtt.select.totxvi.bt$LC50))))
+
+
+all.lm.bt <- t(apply(all.ge.bt, 1, function(x){summary(lm(log2(all.pheno.bt)~all.prot.bt+x))$coef}["x",3:4]))
+all.lm.bt <- as.data.frame(all.lm.bt, as.is=TRUE, stringsAsFactors=FALSE)
+
+all.lm.bt$Probe.Set.ID <- rownames(all.lm.bt)
+
+all.lm.bt <- all.lm.bt[,3:1]
+colnames (all.lm.bt) <- c("Probe.Set.ID", "all.lm.p.bt", "all.lm.stat.bt")
+
+}
+
+if (!(drug %in% c("PRED", "LASP", "VCR", "6MP", "6TG"))){
+common.probes <- intersect(rownames(sj.ge.data.totxv.bt), rownames (sj.ge.data.totxvi.bt))
+
+all.ge.bt <- cbind (sj.ge.data.totxv.bt[common.probes,], sj.ge.data.totxvi.bt[common.probes,])
+all.pheno.bt <- c(mtt.select.totxv.bt$LC50, mtt.select.totxvi.bt$LC50)
+all.prot.bt <- as.factor(c(rep("TOTXV", times=length(mtt.select.totxv.bt$LC50)), rep("TOTXVI", times=length(mtt.select.totxvi.bt$LC50))))
+
+
+all.lm.bt <- t(apply(all.ge.bt, 1, function(x){summary(lm(log2(all.pheno.bt)~all.prot.bt+x))$coef}["x",3:4]))
+all.lm.bt <- as.data.frame(all.lm.bt, as.is=TRUE, stringsAsFactors=FALSE)
+
+all.lm.bt$Probe.Set.ID <- rownames(all.lm.bt)
+
+all.lm.bt <- all.lm.bt[,3:1]
+colnames (all.lm.bt) <- c("Probe.Set.ID", "all.lm.p.bt", "all.lm.stat.bt")
+
+}
+
+
+common.probes.sj <- intersect(rownames(sj.ge.data.totxv.bt), rownames (sj.ge.data.totxvi.bt))
+
+sj.ge.bt <- cbind (sj.ge.data.totxv.bt[common.probes,], sj.ge.data.totxvi.bt[common.probes,])
+sj.pheno.bt <- c(mtt.select.totxv.bt$LC50, mtt.select.totxvi.bt$LC50)
+sj.prot.bt <- as.factor(c(rep("TOTXV", times=length(mtt.select.totxv.bt$LC50)), rep("TOTXVI", times=length(mtt.select.totxvi.bt$LC50))))
+
+
+sj.lm.bt <- t(apply(sj.ge.bt, 1, function(x){summary(lm(log2(sj.pheno.bt)~sj.prot.bt+x))$coef}["x",3:4]))
+sj.lm.bt <- as.data.frame(sj.lm.bt, as.is=TRUE, stringsAsFactors=FALSE)
+
+sj.lm.bt$Probe.Set.ID <- rownames(sj.lm.bt)
+
+sj.lm.bt <- sj.lm.bt[,3:1]
+colnames (sj.lm.bt) <- c("Probe.Set.ID", "sj.lm.p.bt", "sj.lm.stat.bt")
+
+if (drug %in% c("PRED", "LASP", "VCR", "6MP", "6TG")){
+all.lm.bt <- merge(all.lm.bt, sj.lm.bt)
+}
+
+if (!(drug %in% c("PRED", "LASP", "VCR", "6MP", "6TG"))){
+all.lm.bt <- sj.lm.bt
+}
+
+@
+
+
+<<all.lm.b, cache=TRUE>>=
+
+
+if (!(drug %in% c("PRED", "LASP", "VCR", "6MP", "6TG"))){
+common.probes <- intersect(rownames(sj.ge.data.totxv.b), rownames (sj.ge.data.totxvi.b))
+
+all.ge.b <- cbind (sj.ge.data.totxv.b[common.probes,], sj.ge.data.totxvi.b[common.probes,])
+all.pheno.b <- c(mtt.select.totxv.b$LC50, mtt.select.totxvi.b$LC50)
+all.prot.b <- as.factor(c(rep("TOTXV", times=length(mtt.select.totxv.b$LC50)), rep("TOTXVI", times=length(mtt.select.totxvi.b$LC50))))
+
+
+all.lm.b <- t(apply(all.ge.b, 1, function(x){summary(lm(log2(all.pheno.b)~all.prot.b+x))$coef}["x",3:4]))
+all.lm.b <- as.data.frame(all.lm.b, as.is=TRUE, stringsAsFactors=FALSE)
+
+all.lm.b$Probe.Set.ID <- rownames(all.lm.b)
+
+all.lm.b <- all.lm.b[,3:1]
+colnames (all.lm.b) <- c("Probe.Set.ID", "all.lm.p.b", "all.lm.stat.b")
+
+}
+
+
+
+common.probes.sj <- intersect(rownames(sj.ge.data.totxv.b), rownames (sj.ge.data.totxvi.b))
+
+sj.ge.b <- cbind (sj.ge.data.totxv.b[common.probes,], sj.ge.data.totxvi.b[common.probes,])
+sj.pheno.b <- c(mtt.select.totxv.b$LC50, mtt.select.totxvi.b$LC50)
+sj.prot.b <- as.factor(c(rep("TOTXV", times=length(mtt.select.totxv.b$LC50)), rep("TOTXVI", times=length(mtt.select.totxvi.b$LC50))))
+
+
+sj.lm.b <- t(apply(sj.ge.b, 1, function(x){summary(lm(log2(sj.pheno.b)~sj.prot.b+x))$coef}["x",3:4]))
+sj.lm.b <- as.data.frame(sj.lm.b, as.is=TRUE, stringsAsFactors=FALSE)
+
+sj.lm.b$Probe.Set.ID <- rownames(sj.lm.b)
+
+sj.lm.b <- sj.lm.b[,3:1]
+colnames (sj.lm.b) <- c("Probe.Set.ID", "sj.lm.p.b", "sj.lm.stat.b")
+
+if (drug %in% c("PRED", "LASP", "VCR", "6MP", "6TG")){
+all.lm.b <-  sj.lm.b
+}
+
+if (!(drug %in% c("PRED", "LASP", "VCR", "6MP", "6TG"))){
+all.lm.b <- sj.lm.b
+
+}
+
+@ 
+
+
+<<all.lm.t, cache=TRUE>>=
+if (drug %in% c("PRED", "LASP", "VCR", "6MP", "6TG")){
+common.probes <- intersect(rownames(sj.ge.data.totxv.t), rownames (sj.ge.data.totxvi.t))
+#common.probes <- intersect(common.probes, rownames (nl.signal.t))
+
+all.ge.t <- cbind (sj.ge.data.totxv.t[common.probes,], sj.ge.data.totxvi.t[common.probes,])
+all.pheno.t <- c(mtt.select.totxv.t$LC50, mtt.select.totxvi.t$LC50)
+all.prot.t <- as.factor(c(rep("TOTXV", times=length(mtt.select.totxv.t$LC50)), rep("TOTXVI", times=length(mtt.select.totxvi.t$LC50))))
+
+
+all.lm.t <- t(apply(all.ge.t, 1, function(x){summary(lm(log2(all.pheno.t)~all.prot.t+x))$coef}["x",3:4]))
+all.lm.t <- as.data.frame(all.lm.t, as.is=TRUE, stringsAsFactors=FALSE)
+
+all.lm.t$Probe.Set.ID <- rownames(all.lm.t)
+
+all.lm.t <- all.lm.t[,3:1]
+colnames (all.lm.t) <- c("Probe.Set.ID", "all.lm.p.t", "all.lm.stat.t")
+
+}
+
+
+if (!(drug %in% c("PRED", "LASP", "VCR", "6MP", "6TG"))){
+common.probes <- intersect(rownames(sj.ge.data.totxv.t), rownames (sj.ge.data.totxvi.t))
+
+all.ge.t <- cbind (sj.ge.data.totxv.t[common.probes,], sj.ge.data.totxvi.t[common.probes,])
+all.pheno.t <- c(mtt.select.totxv.t$LC50, mtt.select.totxvi.t$LC50)
+all.prot.t <- as.factor(c(rep("TOTXV", times=length(mtt.select.totxv.t$LC50)), rep("TOTXVI", times=length(mtt.select.totxvi.t$LC50))))
+
+
+all.lm.t <- t(apply(all.ge.t, 1, function(x){summary(lm(log2(all.pheno.t)~all.prot.t+x))$coef}["x",3:4]))
+all.lm.t <- as.data.frame(all.lm.t, as.is=TRUE, stringsAsFactors=FALSE)
+
+all.lm.t$Probe.Set.ID <- rownames(all.lm.t)
+
+all.lm.t <- all.lm.t[,3:1]
+colnames (all.lm.t) <- c("Probe.Set.ID", "all.lm.p.t", "all.lm.stat.t")
+
+}
+
+
+
+common.probes.sj <- intersect(rownames(sj.ge.data.totxv.t), rownames (sj.ge.data.totxvi.t))
+
+sj.ge.t <- cbind (sj.ge.data.totxv.t[common.probes,], sj.ge.data.totxvi.t[common.probes,])
+sj.pheno.t <- c(mtt.select.totxv.t$LC50, mtt.select.totxvi.t$LC50)
+sj.prot.t <- as.factor(c(rep("TOTXV", times=length(mtt.select.totxv.t$LC50)), rep("TOTXVI", times=length(mtt.select.totxvi.t$LC50))))
+
+
+sj.lm.t <- t(apply(sj.ge.t, 1, function(x){summary(lm(log2(sj.pheno.t)~sj.prot.t+x))$coef}["x",3:4]))
+sj.lm.t <- as.data.frame(sj.lm.t, as.is=TRUE, stringsAsFactors=FALSE)
+
+sj.lm.t$Probe.Set.ID <- rownames(sj.lm.t)
+
+sj.lm.t <- sj.lm.t[,3:1]
+colnames (sj.lm.t) <- c("Probe.Set.ID", "sj.lm.p.t", "sj.lm.stat.t")
+
+if (drug %in% c("PRED", "LASP", "VCR", "6MP", "6TG")){
+all.lm.t <-  sj.lm.t
+}
+
+if (!(drug %in% c("PRED", "LASP", "VCR", "6MP", "6TG"))){
+all.lm.t <- sj.lm.t
+
+}
+
+@ 
+
+
+
+<<mergelm, cache=TRUE>>=
+
+all.lm.result <- merge (all.lm.bt, all.lm.b)
+all.lm.result <- merge (all.lm.result, all.lm.t)
+ 
+write.table (all.lm.result, file="lm_ge_lc50.tsv", row.names=FALSE, quote=FALSE, sep="\t") 
+@ 
+
+
+<<mergeall, cache=TRUE>>=
+if (drug %in% c("PRED", "LASP", "VCR", "6MP", "6TG")){
+all.result <- merge (totxv.result, totxvi.result)
+}
+
+if (!(drug %in% c("PRED", "LASP", "VCR", "6MP", "6TG"))){
+all.result <- merge (totxv.result, totxvi.result)
+}
+
+all.result <- merge (all.result, all.lm.result)
+
+@ 
+
+
+<<resultmeta, cache=TRUE>>=
+if (drug %in% c("PRED", "LASP", "VCR", "6MP", "6TG")){
+all.result$meta.w.stat.bt <- apply (all.result[,c("totxv.w.stat.bt", "totxvi.w.stat.b")], 1, function (x){sum(x)/sqrt(length(x))})
+all.result$meta.w.p.bt <- 2*(pnorm(abs(all.result$meta.w.stat.bt),lower.tail=FALSE))
+all.result$meta.w.stat.b <- apply (all.result[,c("totxv.w.stat.b", "totxvi.w.stat.b")], 1, function (x){sum(x)/sqrt(length(x))})
+all.result$meta.w.p.b <- 2*(pnorm(abs(all.result$meta.w.stat.b),lower.tail=FALSE))
+all.result$meta.w.stat.t <- apply (all.result[,c("totxv.w.stat.t", "totxvi.w.stat.t")], 1, function (x){sum(x)/sqrt(length(x))})
+all.result$meta.w.p.t <- 2*(pnorm(abs(all.result$meta.w.stat.t),lower.tail=FALSE))
+
+all.result$meta.t.stat.bt <- apply (all.result[,c("totxv.t.stat.bt", "totxvi.t.stat.b")], 1, function (x){sum(x)/sqrt(length(x))})
+all.result$meta.t.p.bt <- 2*(pnorm(abs(all.result$meta.t.stat.bt),lower.tail=FALSE))
+all.result$meta.t.stat.b <- apply (all.result[,c("totxv.t.stat.b", "totxvi.t.stat.b")], 1, function (x){sum(x)/sqrt(length(x))})
+all.result$meta.t.p.b <- 2*(pnorm(abs(all.result$meta.t.stat.b),lower.tail=FALSE))
+all.result$meta.t.stat.t <- apply (all.result[,c("totxv.t.stat.t", "totxvi.t.stat.t")], 1, function (x){sum(x)/sqrt(length(x))})
+all.result$meta.t.p.t <- 2*(pnorm(abs(all.result$meta.t.stat.t),lower.tail=FALSE))
+
+all.result$meta.lm.stat.bt <- apply (all.result[,c("totxv.lm.stat.bt", "totxvi.lm.stat.b")], 1, function (x){sum(x)/sqrt(length(x))})
+all.result$meta.lm.p.bt <- 2*(pnorm(abs(all.result$meta.lm.stat.bt),lower.tail=FALSE))
+all.result$meta.lm.stat.b <- apply (all.result[,c("totxv.lm.stat.b", "totxvi.lm.stat.b")], 1, function (x){sum(x)/sqrt(length(x))})
+all.result$meta.lm.p.b <- 2*(pnorm(abs(all.result$meta.lm.stat.b),lower.tail=FALSE))
+all.result$meta.lm.stat.t <- apply (all.result[,c("totxv.lm.stat.t", "totxvi.lm.stat.t")], 1, function (x){sum(x)/sqrt(length(x))})
+all.result$meta.lm.p.t <- 2*(pnorm(abs(all.result$meta.lm.stat.t),lower.tail=FALSE))
+
+}
+
+
+if (!(drug %in% c("PRED", "LASP", "VCR", "6MP", "6TG"))){
+all.result$meta.w.stat.bt <- apply (all.result[,c("totxv.w.stat.bt", "totxvi.w.stat.b")], 1, function (x){sum(x)/sqrt(length(x))})
+all.result$meta.w.p.bt <- 2*(pnorm(abs(all.result$meta.w.stat.bt),lower.tail=FALSE))
+all.result$meta.w.stat.b <- apply (all.result[,c("totxv.w.stat.b", "totxvi.w.stat.b")], 1, function (x){sum(x)/sqrt(length(x))})
+all.result$meta.w.p.b <- 2*(pnorm(abs(all.result$meta.w.stat.b),lower.tail=FALSE))
+all.result$meta.w.stat.t <- apply (all.result[,c("totxv.w.stat.t", "totxvi.w.stat.t")], 1, function (x){sum(x)/sqrt(length(x))})
+all.result$meta.w.p.t <- 2*(pnorm(abs(all.result$meta.w.stat.t),lower.tail=FALSE))
+
+all.result$meta.t.stat.bt <- apply (all.result[,c("totxv.t.stat.bt", "totxvi.t.stat.b")], 1, function (x){sum(x)/sqrt(length(x))})
+all.result$meta.t.p.bt <- 2*(pnorm(abs(all.result$meta.t.stat.bt),lower.tail=FALSE))
+all.result$meta.t.stat.b <- apply (all.result[,c("totxv.t.stat.b", "totxvi.t.stat.b")], 1, function (x){sum(x)/sqrt(length(x))})
+all.result$meta.t.p.b <- 2*(pnorm(abs(all.result$meta.t.stat.b),lower.tail=FALSE))
+all.result$meta.t.stat.t <- apply (all.result[,c("totxv.t.stat.t", "totxvi.t.stat.t")], 1, function (x){sum(x)/sqrt(length(x))})
+all.result$meta.t.p.t <- 2*(pnorm(abs(all.result$meta.t.stat.t),lower.tail=FALSE))
+
+all.result$meta.lm.stat.bt <- apply (all.result[,c("totxv.lm.stat.bt", "totxvi.lm.stat.b")], 1, function (x){sum(x)/sqrt(length(x))})
+all.result$meta.lm.p.bt <- 2*(pnorm(abs(all.result$meta.lm.stat.bt),lower.tail=FALSE))
+all.result$meta.lm.stat.b <- apply (all.result[,c("totxv.lm.stat.b", "totxvi.lm.stat.b")], 1, function (x){sum(x)/sqrt(length(x))})
+all.result$meta.lm.p.b <- 2*(pnorm(abs(all.result$meta.lm.stat.b),lower.tail=FALSE))
+all.result$meta.lm.stat.t <- apply (all.result[,c("totxv.lm.stat.t", "totxvi.lm.stat.t")], 1, function (x){sum(x)/sqrt(length(x))})
+all.result$meta.lm.p.t <- 2*(pnorm(abs(all.result$meta.lm.stat.t),lower.tail=FALSE))
+
+}
+
+if (drug %in% c("PRED", "LASP", "VCR", "6MP", "6TG")){
+all.result$stat.bt <- all.result$all.lm.stat.bt
+all.result$p.bt <- all.result$all.lm.p.bt
+all.result$stat.b <- all.result$all.lm.stat.b
+all.result$p.b <- all.result$all.lm.p.b
+all.result$stat.t <- all.result$all.lm.stat.t
+all.result$p.t <- all.result$all.lm.p.t
+
+}
+
+if (!(drug %in% c("PRED", "LASP", "VCR", "6MP", "6TG"))){
+all.result$stat.bt <- all.result$sj.lm.stat.bt
+all.result$p.bt <- all.result$sj.lm.p.bt
+all.result$stat.b <- all.result$sj.lm.stat.b
+all.result$p.b <- all.result$sj.lm.p.b
+all.result$stat.t <- all.result$sj.lm.stat.t
+all.result$p.t <- all.result$sj.lm.p.t
+
+}
+
+
+write.table (all.result, file="ge_lc50.tsv", row.names=FALSE, quote=FALSE, sep="\t")
+
+@
+
+
+\end{document}

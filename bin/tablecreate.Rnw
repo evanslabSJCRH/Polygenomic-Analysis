@@ -1,0 +1,254 @@
+\documentclass{article}
+\usepackage[nottoc,numbib]{tocbibind}
+\usepackage{Sweave}
+\usepackage{color}
+\usepackage{amsmath}
+\usepackage{mathtools}
+\usepackage{rotating}
+\usepackage{multirow}
+\usepackage{amscd}
+\usepackage[tableposition=top]{caption}
+\usepackage{ifthen}
+\usepackage[utf8]{inputenc}
+
+
+\renewcommand{\rmdefault}{phv} % Arial font
+\renewcommand{\sfdefault}{phv} % Arial font
+\usepackage[left=0.5in,top=1in,right=0.5in,bottom=1in]{geometry} %margins
+\usepackage{longtable}
+\setlength{\parindent}{0in}
+\usepackage{graphicx}
+\usepackage{pdflscape}
+\usepackage{lscape}
+
+\pagenumbering{gobble}
+
+\begin{document}
+
+<<loadpackages, echo=FALSE, results=hide>>=
+r.lib <- "/home/rautry/drworkflow_Rlib"
+require (xtable, lib.loc=r.lib)
+require (EvansAnalysis, lib.loc=r.lib)
+@ 
+
+<<drugselect, echo=FALSE, results=hide>>=
+wd <- getwd()
+wdsplit <- unlist (strsplit (wd, "/"))
+drug <- wdsplit[length(wdsplit)]
+drug
+
+long.drugname <- ifelse (drug == "PRED", "prednisolone", ifelse (drug == "VCR", "vincristine", ifelse (drug == "LASP", "asparaginase", ifelse (drug == "CYTU", "cytarabine", ifelse (drug == "DEX", "dexamethasone", ifelse (drug == "6MP","6-mercaptopurine", ifelse (drug == "6TG", "6-thioguanine", "")))))))
+
+@ 
+
+
+<<tablesetup, echo=FALSE, results=hide>>=
+
+addtorow<-list()
+addtorow$pos<-list()
+addtorow$pos[[1]]<-c(0)
+addtorow$command<-c(paste("\\hline \n",
+" \\endhead \n",
+" \\hline \n",
+" {\\tiny Continued on next page} \n",
+" \\endfoot \n",
+" \\endlastfoot \n",sep=""))
+
+@ 
+
+
+<<preparegetable, echo=FALSE, results=tex>>=
+ge.lc50.result <- read.delim("ge_lc50.tsv", as.is=TRUE, stringsAsFactors=FALSE)
+ge.lc50.result <- merge (ge.lc50.result, HG.U133A.na31.annot)
+
+ge.cutoff <- unlist(read.delim("gecutoff.txt", as.is=TRUE, stringsAsFactors=FALSE, header=FALSE))
+
+names (ge.cutoff) <- NULL
+
+ge.lc50.result.b <- subset(ge.lc50.result, ge.lc50.result$p.b < ge.cutoff)
+
+ge.lc50.result.b <- ge.lc50.result.b[order(ge.lc50.result.b$p.b),]
+
+#if (drug %in% c("PRED", "LASP", "VCR", "6MP", "6TG")){
+ # ge.lc50.result.b <- ge.lc50.result.b[,c("Gene.Symbol", "Probe.Set.ID", "p.b", "stat.b", "totxv.lm.p.b", "totxv.lm.stat.b", "totxvi.lm.p.b", "totxvi.lm.stat.b", "dutch.lm.p.b", "dutch.lm.stat.b")]
+ # colnames (ge.lc50.result.b) <- c("Gene Symbol", "Probe Set ID", "p-value", "Estimate",  "TOTXV p-value", "TOTXV Estimate", "TOTXVI p-value", "TOTXVI Estimate", "COALL p-value", "COALL Estimate")
+ # ge.lc50.result.b <- xtable (ge.lc50.result.b, display=c("s", "s", "s", "e", "f", "e", "f", "e", "f", "e", "f"), caption=paste("Gene expression significantly related to ", long.drugname, " LC50", sep=""), label="getable")
+#}
+
+#if (!(drug %in% c("PRED", "LASP", "VCR", "6MP","6TG"))){
+  ge.lc50.result.b <- ge.lc50.result.b[,c("Gene.Symbol", "Probe.Set.ID", "p.b", "stat.b", "totxv.lm.p.b", "totxv.lm.stat.b", "totxvi.lm.p.b", "totxvi.lm.stat.b")]
+
+  colnames (ge.lc50.result.b) <- c("Gene Symbol", "Probe Set ID", "p-value", "Estimate",  "TOTXV p-value", "TOTXV Estimate", "TOTXVI p-value", "TOTXVI Estimate")
+  ge.lc50.result.b <- xtable (ge.lc50.result.b, display=c("s", "s", "s", "e", "f", "e", "f", "e", "f"), caption=paste("Gene expression significantly related to ", long.drugname, " LC50", sep=""), label="getable")
+
+#}
+
+print (ge.lc50.result.b, floating = FALSE, caption.placement="top", include.rownames=FALSE, tabular.environment = "longtable", size="\\tiny", add.to.row=addtorow, hline.after=c(-1))
+
+write.csv(ge.lc50.result.b, file="ge.lc50.result.b.csv")
+
+
+@ 
+
+\pagebreak[4]
+
+
+<<preparemirtable, echo=FALSE, results=tex>>=
+mir.lc50.result <- read.delim("mir_lc50.tsv", as.is=TRUE, stringsAsFactors=FALSE)
+mir.anno <- read.csv ("miranno_new.csv", as.is=TRUE, stringsAsFactors=FALSE)
+
+
+mir.lc50.result <- merge (mir.lc50.result, mir.anno)
+mir.lc50.result <- subset (mir.lc50.result, mir.lc50.result$Int == 1)
+
+
+mir.cutoff <- unlist(read.delim("mircutoff.txt", as.is=TRUE, stringsAsFactors=FALSE, header=FALSE))
+
+names (mir.cutoff) <- NULL
+
+mir.lc50.result.b <- subset(mir.lc50.result, mir.lc50.result$p.b < mir.cutoff)
+
+mir.lc50.result.b <- mir.lc50.result.b[order(mir.lc50.result.b$p.b),]
+
+
+mir.lc50.result.b <- mir.lc50.result.b[,c("new_name", "Name", "p.b", "stat.b", "totxv.mir.lm.p.b", "totxv.mir.lm.stat.b", "totxvi.mir.lm.p.b", "totxvi.mir.lm.stat.b")]
+
+colnames (mir.lc50.result.b) <- c("MicroRNA", "Probe", "p-value", "Estimate",  "TOTXV p-value", "TOTXV Estimate", "TOTXVI p-value", "TOTXVI Estimate")
+mir.lc50.result.b <- xtable (mir.lc50.result.b, display=c("s", "s", "s", "e", "f", "e", "f", "e", "f"), caption = paste("MicroRNAs significantly related to ", long.drugname, " LC50", sep=""),  label="mirtable")
+
+print (mir.lc50.result.b, floating = FALSE, caption.placement="top", include.rownames=FALSE, tabular.environment = "longtable", size="\\tiny", add.to.row=addtorow, hline.after=c(-1))
+
+write.csv(mir.lc50.result.b, file="mir.lc50.result.b.csv")
+
+@ 
+
+\pagebreak[4]
+
+<<preparemethtable, echo=FALSE, results=tex>>=
+meth.lc50.result <- read.delim("meth_lc50.tsv", as.is=TRUE, stringsAsFactors=FALSE)
+#meth.anno <- read.csv ("methanno.csv", as.is=TRUE, stringsAsFactors=FALSE)
+
+
+#meth.lc50.result <- merge (meth.lc50.result, meth.anno)
+#meth.lc50.result <- subset (meth.lc50.result, meth.lc50.result$Int == 1)
+
+
+meth.cutoff <- unlist(read.delim("methcutoff.txt", as.is=TRUE, stringsAsFactors=FALSE, header=FALSE))
+
+names (meth.cutoff) <- NULL
+
+meth.lc50.result.b <- subset(meth.lc50.result, meth.lc50.result$p.b < meth.cutoff)
+
+meth.lc50.result.b <- meth.lc50.result.b[order(meth.lc50.result.b$p.b),]
+meth.anno.list.indx <- match(meth.lc50.result.b$IlmnID,InfiniumMethAnnot$IlmnID)
+meth.anno.list <- InfiniumMethAnnot[meth.anno.list.indx,]
+#head(meth.anno.list)
+#dim(meth.anno.list)
+meth.lc50.result.b$meth.gene <- unlist(meth.anno.list$Symbol)
+
+meth.lc50.result.b <- meth.lc50.result.b[,c("IlmnID", "p.b", "stat.b", "totxv.meth.lm.p.b", "totxv.meth.lm.stat.b", "totxvi.meth.lm.p.b", "totxvi.meth.lm.stat.b", "meth.gene")]
+
+colnames (meth.lc50.result.b) <- c("Probe", "p-value", "Estimate",  "TOTXV p-value", "TOTXV Estimate", "TOTXVI p-value", "TOTXVI Estimate", "Annotation")
+meth.lc50.result.b <- xtable (meth.lc50.result.b, display=c("s", "s", "e", "f", "e", "f", "e", "f","s"), caption = paste("DNA methylation significantly related to ", long.drugname, " LC50", sep=""),  label="methtable")
+
+print (meth.lc50.result.b, floating = FALSE, caption.placement="top", include.rownames=FALSE, tabular.environment = "longtable", size="\\tiny", add.to.row=addtorow, hline.after=c(-1))
+
+write.csv(meth.lc50.result.b, file="meth.lc50.result.b.csv")
+@ 
+
+
+\pagebreak[4]
+
+
+<<preparesnptable, echo=FALSE, results=tex>>=
+snp.lc50.result <- read.delim("snp_lc50.tsv", as.is=TRUE, stringsAsFactors=FALSE)
+
+snp.lc50.result <- snp.lc50.result[order (snp.lc50.result$p.b),]
+snp.lc50.result <- snp.lc50.result[!is.na(snp.lc50.result$p.b),]
+snp.lc50.result$xv.01 <- apply (snp.lc50.result[,c("totxv.fisher.01.b", "totxv.fisher.11.b", "totxv.fisher.21.b")], 1, sum)
+
+snp.lc50.result$xv.03 <- apply (snp.lc50.result[,c("totxv.fisher.03.b", "totxv.fisher.13.b", "totxv.fisher.23.b")], 1, sum)
+
+snp.lc50.result$xvi.01 <- apply (snp.lc50.result[,c("totxvi.fisher.01.b", "totxvi.fisher.11.b", "totxvi.fisher.21.b")], 1, sum)
+
+snp.lc50.result$xvi.03 <- apply (snp.lc50.result[,c("totxvi.fisher.03.b", "totxvi.fisher.13.b", "totxvi.fisher.23.b")], 1, sum)
+
+snp.lc50.result$min.count <- apply (snp.lc50.result[,c("xv.01", "xv.03", "xvi.01", "xvi.03")], 1, min)
+
+snp.lc50.result <- snp.lc50.result[snp.lc50.result$min.count > 0,]
+
+snp.anno <- read.csv("/home/rautry/drworkflow_data/combined_gene_snps_201601.csv", header =TRUE, stringsAsFactors =FALSE)
+
+#snp.anno <- read.csv("/home/rautry/data/GenomeWideSNP_6.na35.annot.csv", header =TRUE, stringsAsFactors =FALSE)
+head(snp.anno)
+
+#snp.lc50.result <- merge (snp.lc50.result, snp.anno)
+
+#snp.lc50.result <- subset (snp.lc50.result, snp.lc50.result$Int == 1)
+
+
+snp.cutoff <- unlist(read.delim("snpcutoff.txt", as.is=TRUE, stringsAsFactors=FALSE, header=FALSE))
+
+names (snp.cutoff) <- NULL
+
+snp.lc50.result.b <- subset(snp.lc50.result, snp.lc50.result$p.b < snp.cutoff)
+
+snp.lc50.result.b <- snp.lc50.result.b[order(snp.lc50.result.b$p.b),]
+
+snp.anno.list.indx <- match(snp.lc50.result.b$ProbeSetID,snp.anno$snpid)
+snp.anno.list <- snp.anno[snp.anno.list.indx,]
+#head(snp.anno.list)
+#dim(snp.anno.list)
+snp.lc50.result.b$snp.gene <- unlist(snp.anno.list$gene)
+snp.lc50.result.b <- snp.lc50.result.b[,c("ProbeSetID", "p.b", "stat.b", "totxv.snp.lm.p.b", "totxv.snp.lm.stat.b", "totxvi.snp.lm.p.b", "totxvi.snp.lm.stat.b", "snp.gene")]
+
+colnames (snp.lc50.result.b) <- c("Probe", "p-value", "Estimate",  "TOTXV p-value", "TOTXV Estimate", "TOTXVI p-value", "TOTXVI Estimate","Annotation")
+snp.lc50.result.b <- xtable (snp.lc50.result.b, display=c("s", "s", "e", "f", "e", "f", "e", "f","s"),  caption = paste("SNPs significantly related to ", long.drugname, " LC50", sep=""),  label="snptable")
+
+print (snp.lc50.result.b, floating = FALSE, caption.placement="top", include.rownames=FALSE, tabular.environment = "longtable", size="\\tiny", add.to.row=addtorow, hline.after=c(-1))
+
+write.csv(snp.lc50.result.b, file="snp.lc50.result.b.csv")
+@ 
+
+\pagebreak[4]
+
+<<preparecntable, echo=FALSE, results=tex>>=
+cn.lc50.result <- read.delim("cn_lc50.tsv", as.is=TRUE, stringsAsFactors=FALSE)
+#cn.anno <- read.csv ("cnanno.csv", as.is=TRUE, stringsAsFactors=FALSE)
+
+
+#cn.lc50.result <- merge (cn.lc50.result, cn.anno)
+#cn.lc50.result <- subset (cn.lc50.result, cn.lc50.result$Int == 1)
+
+
+cn.cutoff <- unlist(read.delim("cncutoff.txt", as.is=TRUE, stringsAsFactors=FALSE, header=FALSE))
+
+names (cn.cutoff) <- NULL
+
+cn.lc50.result.b <- subset(cn.lc50.result, cn.lc50.result$p.b <= max(cn.cutoff))
+
+cn.lc50.result.b <- cn.lc50.result.b[order(cn.lc50.result.b$p.b),]
+
+cn.cutoff.index <- unlist(read.delim("cncutoffindex.txt", as.is=TRUE, stringsAsFactors=FALSE, header=FALSE))
+
+names (cn.cutoff.index) <- NULL
+
+cn.lc50.result.b <- cn.lc50.result.b[1:max(cn.cutoff.index),]
+
+cn.lc50.result.b <- cn.lc50.result.b[,c("Probe.Set.ID", "p.b", "stat.b", "totxv.cn.lm.p.b", "totxv.cn.lm.stat.b", "totxvi.cn.lm.p.b", "totxvi.cn.lm.stat.b")]
+
+colnames (cn.lc50.result.b) <- c("Probe", "p-value", "Estimate",  "TOTXV p-value", "TOTXV Estimate", "TOTXVI p-value", "TOTXVI Estimate")
+cn.lc50.result.b <- xtable (cn.lc50.result.b, display=c("s", "s", "e", "f", "e", "f", "e", "f"),  caption = paste("CNs significantly related to ", long.drugname, " LC50", sep=""),  label="cntable")
+
+print (cn.lc50.result.b, floating = FALSE, caption.placement="top", include.rownames=FALSE, tabular.environment = "longtable", size="\\tiny", add.to.row=addtorow, hline.after=c(-1))
+
+write.csv(cn.lc50.result.b, file="cn.lc50.result.b.csv")
+
+@ 
+
+
+
+
+
+
+\end{document}

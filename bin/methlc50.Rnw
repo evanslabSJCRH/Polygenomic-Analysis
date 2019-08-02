@@ -1,0 +1,779 @@
+\documentclass{article}
+\usepackage[nottoc,numbib]{tocbibind}
+\usepackage{Sweave}
+\usepackage{color}
+\usepackage{amsmath}
+\usepackage{mathtools}
+\usepackage{rotating}
+\usepackage{multirow}
+\usepackage{amscd}
+\usepackage[tableposition=top]{caption}
+\usepackage{ifthen}
+\usepackage[utf8]{inputenc}
+
+
+\renewcommand{\rmdefault}{phv} % Arial font
+\renewcommand{\sfdefault}{phv} % Arial font
+\usepackage[left=1in,top=1in,right=1in,bottom=1in]{geometry} %margins
+\usepackage{longtable}
+\setlength{\parindent}{0in}
+\usepackage{graphicx}
+\usepackage{pdflscape}
+\usepackage{lscape}
+
+\usepackage{lastpage} % for the number of the last page in the document
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+
+\rhead{Section \thesubsection}
+\rfoot{Page \thepage\ of \pageref{LastPage}}
+\usepackage{verbatim}
+
+\begin{document}
+
+\pagebreak[4]
+
+<<loadpackages>>=
+
+r.lib <- "/home/rautry/drworkflow_Rlib"
+#"/nfs_exports/apps/pharmsci/evans_lab/Rlib"
+require (EvansData, lib.loc=r.lib)
+require (EvansAnalysis, lib.loc=r.lib)
+require (SJHMGEData, lib.loc=r.lib)
+require (xtable, lib.loc=r.lib)
+
+require (mvtnorm, lib.loc=r.lib)
+require (modeltools, lib.loc=r.lib)
+require (coin, lib.loc=r.lib)
+
+require (mvtnorm, lib.loc=r.lib)
+require (VGAM, lib.loc=r.lib)
+require (lawstat, lib.loc=r.lib)
+require (KernSmooth, lib.loc=r.lib)
+
+require (gtools, lib.loc=r.lib)
+require (gdata, lib.loc=r.lib)
+require (bitops, lib.loc=r.lib)
+require (caTools, lib.loc=r.lib)
+require (gplots, lib.loc=r.lib)
+require (amap, lib.loc=r.lib)
+require (survival, lib.loc=r.lib)
+
+@
+
+
+<<drugselect, cache=TRUE>>=
+wd <- getwd()
+wdsplit <- unlist (strsplit (wd, "/"))
+drug <- wdsplit[length(wdsplit)]
+drug
+@ 
+
+
+<<methdatatotxv.bt, cache=TRUE>>=
+mtt.select <- mtt.prep(drug)
+source("drugcatadjust.R")
+rownames(mtt.select) <- mtt.select$MRN
+
+mtt.select.bt <- subset (mtt.select, mtt.select$LIN %in% c("B", "T"))
+
+
+meth.pt.int.totxv.bt <- intersect (colnames (meth.data.totxv.som), mtt.select.bt$MRN)
+
+
+meth.mtt.select.totxv.bt <- mtt.select.bt[as.character(meth.pt.int.totxv.bt),]
+
+
+meth.data.totxv.bt <- meth.data.totxv.som[,as.character(meth.pt.int.totxv.bt)]
+
+
+meth.data.totxv.cat.bt <- ifelse (meth.data.totxv.bt < 0.25, 0, 1)
+meth.data.totxv.cat.three.bt <- ifelse (meth.data.totxv.bt <= 0.2, 0, ifelse(meth.data.totxv.bt < 0.6, 1, 2))
+
+meth.data.totxv.cat.three.bt <- as.data.frame(meth.data.totxv.cat.three.bt, as.is=TRUE, stringsAsFactors=FALSE)
+
+totxv.meth.lm.p.bt <- rep (NA, times=dim(meth.data.totxv.cat.three.bt)[1])
+totxv.meth.lm.stat.bt <- rep (NA, times=dim(meth.data.totxv.cat.three.bt)[1])
+
+for (i in 1:nrow(meth.data.totxv.cat.three.bt)){
+  if(length (table(unlist(meth.data.totxv.cat.three.bt[i,]))) >1){
+    curr.result <- summary(lm(log2(meth.mtt.select.totxv.bt$LC50)~unlist(meth.data.totxv.cat.three.bt[i,])))$coef[2,3:4]
+    totxv.meth.lm.p.bt[i] <- curr.result[2]
+    totxv.meth.lm.stat.bt[i] <- curr.result[1]
+  }
+}
+
+#totxv.meth.lm.bt <- cbind(rownames(meth.data.totxv.cat.bthree.bt), totxv.meth.lm.p.bt, totxv.meth.lm.stat.bt)
+#colnames (totxv.meth.lm.bt) <- c("IlmnID", "totxv.meth.lm.p.bt", "totxv.meth.lm.stat.bt")
+
+#totxv.meth.lm.bt <- as.data.frame(totxv.meth.lm.bt, as.is=TRUE, stringsAsFactors=FALSE)
+
+meth.mtt.select.totxv.bt.ext <- subset (meth.mtt.select.totxv.bt, meth.mtt.select.totxv.bt$LC50.GROUP %in% c(1,3))
+
+
+meth.data.totxv.cat.bt.ext <- meth.data.totxv.cat.bt[,as.character(meth.mtt.select.totxv.bt.ext$MRN)]
+
+
+phenotype.totxv.bt <- meth.mtt.select.totxv.bt.ext$LC50.GROUP
+
+
+fisher.p.totxv.bt <- rep (NA, times=dim(meth.data.totxv.cat.bt.ext)[1])
+fisher.or.totxv.bt <- rep (NA, times=dim(meth.data.totxv.cat.bt.ext)[1])
+fisher.01.totxv.bt <- rep (NA, times=dim(meth.data.totxv.cat.bt.ext)[1])
+fisher.03.totxv.bt <- rep (NA, times=dim(meth.data.totxv.cat.bt.ext)[1])
+fisher.11.totxv.bt <- rep (NA, times=dim(meth.data.totxv.cat.bt.ext)[1])
+fisher.13.totxv.bt <- rep (NA, times=dim(meth.data.totxv.cat.bt.ext)[1])
+
+
+for (i in 1:nrow(meth.data.totxv.cat.bt.ext)){
+
+  x.totxv.bt <- meth.data.totxv.cat.bt.ext[i,]
+
+  fisher.freq.totxv.bt <- as.data.frame(table (factor(x.totxv.bt, levels=c(0,1)),factor(phenotype.totxv.bt, levels=c(1,3))), as.is=TRUE, stringsAsFactors=FALSE)$Freq
+  fisher.01.totxv.bt[i] <- fisher.freq.totxv.bt[1] 
+  fisher.11.totxv.bt[i] <- fisher.freq.totxv.bt[2] 
+  fisher.03.totxv.bt[i] <- fisher.freq.totxv.bt[3] 
+  fisher.13.totxv.bt[i] <- fisher.freq.totxv.bt[4] 
+ 
+  if (min(table(x.totxv.bt))> 2 & length (table(x.totxv.bt)) >1){
+    totxv.meth.result.btemp <- fisher.test (table(x.totxv.bt,phenotype.totxv.bt))
+    fisher.p.totxv.bt[i] <- totxv.meth.result.btemp$p.value
+    fisher.or.totxv.bt[i] <- totxv.meth.result.btemp$estimate
+
+  }
+
+
+}
+
+meth.result.totxv.bt <- cbind (rownames (meth.data.totxv.som), fisher.p.totxv.bt, fisher.or.totxv.bt, fisher.01.totxv.bt, fisher.03.totxv.bt, fisher.11.totxv.bt, fisher.13.totxv.bt, totxv.meth.lm.p.bt, totxv.meth.lm.stat.bt)
+
+meth.result.totxv.bt <- as.data.frame(meth.result.totxv.bt, as.is=TRUE, stringsAsFactors=FALSE)
+
+colnames (meth.result.totxv.bt) <- c("IlmnID", "totxv.fisher.p.bt", "totxv.fisher.or.bt", "fisher.01.totxv.bt", "fisher.03.totxv.bt", "fisher.11.totxv.bt", "fisher.13.totxv.bt", "totxv.meth.lm.p.bt", "totxv.meth.lm.stat.bt")
+
+meth.result.totxv.bt$totxv.fisher.p.bt <- as.numeric (meth.result.totxv.bt$totxv.fisher.p.bt)
+meth.result.totxv.bt$totxv.fisher.or.bt <- as.numeric (meth.result.totxv.bt$totxv.fisher.or.bt)
+
+
+@
+
+
+
+
+
+<<methdatatotxv.b, cache=TRUE>>=
+mtt.select <- mtt.prep(drug)
+source("drugcatadjust.R")
+rownames(mtt.select) <- mtt.select$MRN
+
+mtt.select.b <- subset (mtt.select, mtt.select$LIN == "B")
+
+
+meth.pt.int.totxv.b <- intersect (colnames (meth.data.totxv.som), mtt.select.b$MRN)
+
+
+meth.mtt.select.totxv.b <- mtt.select.b[as.character(meth.pt.int.totxv.b),]
+
+
+meth.data.totxv.b <- meth.data.totxv.som[,as.character(meth.pt.int.totxv.b)]
+
+
+meth.data.totxv.cat.b <- ifelse (meth.data.totxv.b < 0.25, 0, 1)
+meth.data.totxv.cat.three.b <- ifelse (meth.data.totxv.b <= 0.2, 0, ifelse(meth.data.totxv.b < 0.6, 1, 2))
+
+meth.data.totxv.cat.three.b <- as.data.frame(meth.data.totxv.cat.three.b, as.is=TRUE, stringsAsFactors=FALSE)
+
+totxv.meth.lm.p.b <- rep (NA, times=dim(meth.data.totxv.cat.three.b)[1])
+totxv.meth.lm.stat.b <- rep (NA, times=dim(meth.data.totxv.cat.three.b)[1])
+
+for (i in 1:nrow(meth.data.totxv.cat.three.b)){
+  if(length (table(unlist(meth.data.totxv.cat.three.b[i,]))) >1){
+    curr.result <- summary(lm(log2(meth.mtt.select.totxv.b$LC50)~unlist(meth.data.totxv.cat.three.b[i,])))$coef[2,3:4]
+    totxv.meth.lm.p.b[i] <- curr.result[2]
+    totxv.meth.lm.stat.b[i] <- curr.result[1]
+  }
+}
+
+#totxv.meth.lm.b <- cbind(rownames(meth.data.totxv.cat.bhree.b), totxv.meth.lm.p.b, totxv.meth.lm.stat.b)
+#colnames (totxv.meth.lm.b) <- c("IlmnID", "totxv.meth.lm.p.b", "totxv.meth.lm.stat.b")
+
+#totxv.meth.lm.b <- as.data.frame(totxv.meth.lm.b, as.is=TRUE, stringsAsFactors=FALSE)
+
+meth.mtt.select.totxv.b.ext <- subset (meth.mtt.select.totxv.b, meth.mtt.select.totxv.b$LC50.GROUP %in% c(1,3))
+
+
+meth.data.totxv.cat.b.ext <- meth.data.totxv.cat.b[,as.character(meth.mtt.select.totxv.b.ext$MRN)]
+
+
+phenotype.totxv.b <- meth.mtt.select.totxv.b.ext$LC50.GROUP
+
+
+fisher.p.totxv.b <- rep (NA, times=dim(meth.data.totxv.cat.b.ext)[1])
+fisher.or.totxv.b <- rep (NA, times=dim(meth.data.totxv.cat.b.ext)[1])
+fisher.01.totxv.b <- rep (NA, times=dim(meth.data.totxv.cat.b.ext)[1])
+fisher.03.totxv.b <- rep (NA, times=dim(meth.data.totxv.cat.b.ext)[1])
+fisher.11.totxv.b <- rep (NA, times=dim(meth.data.totxv.cat.b.ext)[1])
+fisher.13.totxv.b <- rep (NA, times=dim(meth.data.totxv.cat.b.ext)[1])
+
+
+for (i in 1:nrow(meth.data.totxv.cat.b.ext)){
+
+  x.totxv.b <- meth.data.totxv.cat.b.ext[i,]
+
+  fisher.freq.totxv.b <- as.data.frame(table (factor(x.totxv.b, levels=c(0,1)),factor(phenotype.totxv.b, levels=c(1,3))), as.is=TRUE, stringsAsFactors=FALSE)$Freq
+  fisher.01.totxv.b[i] <- fisher.freq.totxv.b[1] 
+  fisher.11.totxv.b[i] <- fisher.freq.totxv.b[2] 
+  fisher.03.totxv.b[i] <- fisher.freq.totxv.b[3] 
+  fisher.13.totxv.b[i] <- fisher.freq.totxv.b[4] 
+ 
+  if (min(table(x.totxv.b))> 2 & length (table(x.totxv.b)) >1){
+    totxv.meth.result.temp <- fisher.test (table(x.totxv.b,phenotype.totxv.b))
+    fisher.p.totxv.b[i] <- totxv.meth.result.temp$p.value
+    fisher.or.totxv.b[i] <- totxv.meth.result.temp$estimate
+
+  }
+
+
+}
+
+meth.result.totxv.b <- cbind (rownames (meth.data.totxv.som), fisher.p.totxv.b, fisher.or.totxv.b, fisher.01.totxv.b, fisher.03.totxv.b, fisher.11.totxv.b, fisher.13.totxv.b, totxv.meth.lm.p.b, totxv.meth.lm.stat.b)
+
+meth.result.totxv.b <- as.data.frame(meth.result.totxv.b, as.is=TRUE, stringsAsFactors=FALSE)
+
+colnames (meth.result.totxv.b) <- c("IlmnID", "totxv.fisher.p.b", "totxv.fisher.or.b", "fisher.01.totxv.b", "fisher.03.totxv.b", "fisher.11.totxv.b", "fisher.13.totxv.b", "totxv.meth.lm.p.b", "totxv.meth.lm.stat.b")
+
+meth.result.totxv.b$totxv.fisher.p.b <- as.numeric (meth.result.totxv.b$totxv.fisher.p.b)
+meth.result.totxv.b$totxv.fisher.or.b <- as.numeric (meth.result.totxv.b$totxv.fisher.or.b)
+
+
+@
+
+
+
+
+
+
+
+<<methdatatotxv.t, cache=TRUE>>=
+mtt.select <- mtt.prep(drug)
+source("drugcatadjust.R")
+rownames(mtt.select) <- mtt.select$MRN
+
+mtt.select.t <- subset (mtt.select, mtt.select$LIN == "T")
+
+
+meth.pt.int.totxv.t <- intersect (colnames (meth.data.totxv.som), mtt.select.t$MRN)
+
+
+meth.mtt.select.totxv.t <- mtt.select.t[as.character(meth.pt.int.totxv.t),]
+
+
+meth.data.totxv.t <- meth.data.totxv.som[,as.character(meth.pt.int.totxv.t)]
+
+
+meth.data.totxv.cat.t <- ifelse (meth.data.totxv.t < 0.25, 0, 1)
+meth.data.totxv.cat.three.t <- ifelse (meth.data.totxv.t <= 0.2, 0, ifelse(meth.data.totxv.t < 0.6, 1, 2))
+
+meth.data.totxv.cat.three.t <- as.data.frame(meth.data.totxv.cat.three.t, as.is=TRUE, stringsAsFactors=FALSE)
+
+totxv.meth.lm.p.t <- rep (NA, times=dim(meth.data.totxv.cat.three.t)[1])
+totxv.meth.lm.stat.t <- rep (NA, times=dim(meth.data.totxv.cat.three.t)[1])
+
+for (i in 1:nrow(meth.data.totxv.cat.three.t)){
+  if(length (table(unlist(meth.data.totxv.cat.three.t[i,]))) >1){
+    curr.result <- summary(lm(log2(meth.mtt.select.totxv.t$LC50)~unlist(meth.data.totxv.cat.three.t[i,])))$coef[2,3:4]
+    totxv.meth.lm.p.t[i] <- curr.result[2]
+    totxv.meth.lm.stat.t[i] <- curr.result[1]
+  }
+}
+
+#totxv.meth.lm.t <- cbind(rownames(meth.data.totxv.cat.three.t), totxv.meth.lm.p.t, totxv.meth.lm.stat.t)
+#colnames (totxv.meth.lm.t) <- c("IlmnID", "totxv.meth.lm.p.t", "totxv.meth.lm.stat.t")
+
+#totxv.meth.lm.t <- as.data.frame(totxv.meth.lm.t, as.is=TRUE, stringsAsFactors=FALSE)
+
+meth.mtt.select.totxv.t.ext <- subset (meth.mtt.select.totxv.t, meth.mtt.select.totxv.t$LC50.GROUP %in% c(1,3))
+
+
+meth.data.totxv.cat.t.ext <- meth.data.totxv.cat.t[,as.character(meth.mtt.select.totxv.t.ext$MRN)]
+
+
+phenotype.totxv.t <- meth.mtt.select.totxv.t.ext$LC50.GROUP
+
+
+fisher.p.totxv.t <- rep (NA, times=dim(meth.data.totxv.cat.t.ext)[1])
+fisher.or.totxv.t <- rep (NA, times=dim(meth.data.totxv.cat.t.ext)[1])
+fisher.01.totxv.t <- rep (NA, times=dim(meth.data.totxv.cat.t.ext)[1])
+fisher.03.totxv.t <- rep (NA, times=dim(meth.data.totxv.cat.t.ext)[1])
+fisher.11.totxv.t <- rep (NA, times=dim(meth.data.totxv.cat.t.ext)[1])
+fisher.13.totxv.t <- rep (NA, times=dim(meth.data.totxv.cat.t.ext)[1])
+
+
+for (i in 1:nrow(meth.data.totxv.cat.t.ext)){
+
+  x.totxv.t <- meth.data.totxv.cat.t.ext[i,]
+
+  fisher.freq.totxv.t <- as.data.frame(table (factor(x.totxv.t, levels=c(0,1)),factor(phenotype.totxv.t, levels=c(1,3))), as.is=TRUE, stringsAsFactors=FALSE)$Freq
+  fisher.01.totxv.t[i] <- fisher.freq.totxv.t[1] 
+  fisher.11.totxv.t[i] <- fisher.freq.totxv.t[2] 
+  fisher.03.totxv.t[i] <- fisher.freq.totxv.t[3] 
+  fisher.13.totxv.t[i] <- fisher.freq.totxv.t[4] 
+ 
+  if (min(table(x.totxv.t))> 2 & length (table(x.totxv.t)) >1){
+    totxv.meth.result.temp <- fisher.test (table(x.totxv.t,phenotype.totxv.t))
+    fisher.p.totxv.t[i] <- totxv.meth.result.temp$p.value
+    fisher.or.totxv.t[i] <- totxv.meth.result.temp$estimate
+
+  }
+
+
+}
+
+meth.result.totxv.t <- cbind (rownames (meth.data.totxv.som), fisher.p.totxv.t, fisher.or.totxv.t, fisher.01.totxv.t, fisher.03.totxv.t, fisher.11.totxv.t, fisher.13.totxv.t, totxv.meth.lm.p.t, totxv.meth.lm.stat.t)
+
+meth.result.totxv.t <- as.data.frame(meth.result.totxv.t, as.is=TRUE, stringsAsFactors=FALSE)
+
+colnames (meth.result.totxv.t) <- c("IlmnID", "totxv.fisher.p.t", "totxv.fisher.or.t", "fisher.01.totxv.t", "fisher.03.totxv.t", "fisher.11.totxv.t", "fisher.13.totxv.t", "totxv.meth.lm.p.t", "totxv.meth.lm.stat.t")
+
+meth.result.totxv.t$totxv.fisher.p.t <- as.numeric (meth.result.totxv.t$totxv.fisher.p.t)
+meth.result.totxv.t$totxv.fisher.or.t <- as.numeric (meth.result.totxv.t$totxv.fisher.or.t)
+
+
+@
+
+
+<<methdatatotxvi.bt, cache=TRUE>>=
+
+save.image("error.RData")
+mtt.select <- mtt.prep(drug)
+source("drugcatadjust.R")
+rownames(mtt.select) <- mtt.select$MRN
+
+mtt.select.bt <- subset (mtt.select, mtt.select$LIN %in% c("B", "T"))
+
+meth.pt.int.totxvi.bt <- intersect (colnames (meth.data.totxvi.som), mtt.select.bt$MRN)
+
+meth.mtt.select.totxvi.bt <- mtt.select.bt[as.character(meth.pt.int.totxvi.bt),]
+
+meth.data.totxvi.bt <- meth.data.totxvi.som[,as.character(meth.pt.int.totxvi.bt)]
+
+meth.data.totxvi.cat.bt <- ifelse (meth.data.totxvi.bt < 0.25, 0, 1)
+meth.data.totxvi.cat.three.bt <- ifelse (meth.data.totxvi.bt <= 0.2, 0, ifelse(meth.data.totxvi.bt < 0.6, 1, 2))
+
+meth.data.totxvi.cat.three.bt <- as.data.frame(meth.data.totxvi.cat.three.bt, as.is=TRUE, stringsAsFactors=FALSE)
+
+totxvi.meth.lm.p.bt <- rep (NA, times=dim(meth.data.totxvi.cat.three.bt)[1])
+totxvi.meth.lm.stat.bt <- rep (NA, times=dim(meth.data.totxvi.cat.three.bt)[1])
+
+for (i in 1:nrow(meth.data.totxvi.cat.three.bt)){
+  if(length (table(unlist(meth.data.totxvi.cat.three.bt[i,]))) >1){
+    curr.result <- summary(lm(log2(meth.mtt.select.totxvi.bt$LC50)~unlist(meth.data.totxvi.cat.three.bt[i,])))$coef[2,3:4]
+    totxvi.meth.lm.p.bt[i] <- curr.result[2]
+    totxvi.meth.lm.stat.bt[i] <- curr.result[1]
+  }
+}
+
+
+#totxvi.meth.lm.b <- cbind(rownames(meth.data.totxvi.cat.three.b), totxvi.meth.lm.p.b, totxvi.meth.lm.stat.b, stringsAsFactors=FALSE)
+#colnames (totxvi.meth.lm.b) <- c("IlmnID", "totxvi.meth.lm.p.b", "totxvi.meth.lm.stat.b")
+
+#totxvi.meth.lm.b <- as.data.frame(totxvi.meth.lm.b, as.is=TRUE, stringsAsFactors=FALSE)
+
+
+meth.mtt.select.totxvi.bt.ext <- subset (meth.mtt.select.totxvi.bt, meth.mtt.select.totxvi.bt$LC50.GROUP %in% c(1,3))
+
+meth.data.totxvi.cat.bt.ext <- meth.data.totxvi.cat.bt[,as.character(meth.mtt.select.totxvi.bt.ext$MRN)]
+
+phenotype.totxvi.bt <- meth.mtt.select.totxvi.bt.ext$LC50.GROUP
+
+fisher.p.totxvi.bt <- rep (NA, times=dim(meth.data.totxvi.cat.bt.ext)[1])
+fisher.or.totxvi.bt <- rep (NA, times=dim(meth.data.totxvi.cat.bt.ext)[1])
+fisher.01.totxvi.bt <- rep (NA, times=dim(meth.data.totxvi.cat.bt.ext)[1])
+fisher.03.totxvi.bt <- rep (NA, times=dim(meth.data.totxvi.cat.bt.ext)[1])
+fisher.11.totxvi.bt <- rep (NA, times=dim(meth.data.totxvi.cat.bt.ext)[1])
+fisher.13.totxvi.bt <- rep (NA, times=dim(meth.data.totxvi.cat.bt.ext)[1])
+
+for (i in 1:nrow(meth.data.totxvi.cat.bt.ext)){
+
+  x.totxvi.bt <- meth.data.totxvi.cat.bt.ext[i,]
+
+  fisher.freq.totxvi.bt <- as.data.frame(table (factor(x.totxvi.bt, levels=c(0,1)),factor(phenotype.totxvi.bt, levels=c(1,3))), as.is=TRUE, stringsAsFactors=FALSE)$Freq
+  fisher.01.totxvi.bt[i] <- fisher.freq.totxvi.bt[1] 
+  fisher.11.totxvi.bt[i] <- fisher.freq.totxvi.bt[2] 
+  fisher.03.totxvi.bt[i] <- fisher.freq.totxvi.bt[3] 
+  fisher.13.totxvi.bt[i] <- fisher.freq.totxvi.bt[4] 
+  
+
+  if (min(table(x.totxvi.bt))> 2 & length (table(x.totxvi.bt)) >1){
+    totxvi.meth.result.temp <- fisher.test (table(x.totxvi.bt,phenotype.totxvi.bt))
+    fisher.p.totxvi.bt[i] <- totxvi.meth.result.temp$p.value
+    fisher.or.totxvi.bt[i] <- totxvi.meth.result.temp$estimate
+
+  }
+
+}
+
+
+
+meth.result.totxvi.bt <- cbind (rownames (meth.data.totxvi.som), fisher.p.totxvi.bt, fisher.or.totxvi.bt, fisher.01.totxvi.bt, fisher.03.totxvi.bt, fisher.11.totxvi.bt, fisher.13.totxvi.bt, totxvi.meth.lm.p.bt,  totxvi.meth.lm.stat.bt)
+
+meth.result.totxvi.bt <- as.data.frame(meth.result.totxvi.bt, as.is=TRUE, stringsAsFactors=FALSE)
+
+colnames (meth.result.totxvi.bt) <- c("IlmnID", "totxvi.fisher.p.bt", "totxvi.fisher.or.bt", "fisher.01.totxvi.bt", "fisher.03.totxvi.bt", "fisher.11.totxvi.bt", "fisher.13.totxvi.bt", "totxvi.meth.lm.p.bt", "totxvi.meth.lm.stat.bt")
+
+
+meth.result.totxvi.bt$totxvi.fisher.p.bt <- as.numeric (meth.result.totxvi.bt$totxvi.fisher.p.bt)
+meth.result.totxvi.bt$totxvi.fisher.or.bt <- as.numeric (meth.result.totxvi.bt$totxvi.fisher.or.bt)
+
+write.csv(meth.result.totxvi.bt, file = "meth.result.totxvi.bt.csv", row.names=FALSE, quote=FALSE)
+
+meth.anno.450 <- read.csv("/home/rautry/data/HumanMethylation450_15017482_v1-2.csv", header = TRUE, stringsAsFactors = FALSE)
+meth.anno.450 <- meth.anno.450[,c("IlmnID","UCSC_RefGene_Name","CHR","MAPINFO", "Probe_SNPs")]
+meth.totxvi.pred.bt.anno<- merge(meth.result.totxvi.bt,meth.anno.450, by = "IlmnID")
+write.csv(meth.totxvi.pred.bt.anno, file = "meth.result.totxvi.bt.anno.csv", row.names=FALSE, quote=FALSE)
+@
+
+
+
+
+
+<<methdatatotxvi.b, cache=TRUE>>=
+# linear model of three category methylation output in for loop
+mtt.select <- mtt.prep(drug)
+source("drugcatadjust.R")
+rownames(mtt.select) <- mtt.select$MRN
+
+mtt.select.b <- subset (mtt.select, mtt.select$LIN == "B")
+
+meth.pt.int.totxvi.b <- intersect (colnames (meth.data.totxvi.som), mtt.select.b$MRN)
+
+meth.mtt.select.totxvi.b <- mtt.select.b[as.character(meth.pt.int.totxvi.b),]
+
+meth.data.totxvi.b <- meth.data.totxvi.som[,as.character(meth.pt.int.totxvi.b)]
+
+meth.data.totxvi.cat.b <- ifelse (meth.data.totxvi.b < 0.25, 0, 1)
+meth.data.totxvi.cat.three.b <- ifelse (meth.data.totxvi.b <= 0.2, 0, ifelse(meth.data.totxvi.b < 0.6, 1, 2))
+
+meth.data.totxvi.cat.three.b <- as.data.frame(meth.data.totxvi.cat.three.b, as.is=TRUE, stringsAsFactors=FALSE)
+
+totxvi.meth.lm.p.b <- rep (NA, times=dim(meth.data.totxvi.cat.three.b)[1])
+totxvi.meth.lm.stat.b <- rep (NA, times=dim(meth.data.totxvi.cat.three.b)[1])
+
+for (i in 1:nrow(meth.data.totxvi.cat.three.b)){
+  if(length (table(unlist(meth.data.totxvi.cat.three.b[i,]))) >1){
+    curr.result <- summary(lm(log2(meth.mtt.select.totxvi.b$LC50)~unlist(meth.data.totxvi.cat.three.b[i,])))$coef[2,3:4]
+    totxvi.meth.lm.p.b[i] <- curr.result[2]
+    totxvi.meth.lm.stat.b[i] <- curr.result[1]
+  }
+}
+
+#save.image("error.RData")
+#totxvi.meth.lm.b <- cbind(rownames(meth.data.totxvi.cat.three.b), totxvi.meth.lm.p.b, totxvi.meth.lm.stat.b, stringsAsFactors=FALSE)
+#colnames (totxvi.meth.lm.b) <- c("IlmnID", "totxvi.meth.lm.p.b", "totxvi.meth.lm.stat.b")
+
+#totxvi.meth.lm.b <- as.data.frame(totxvi.meth.lm.b, as.is=TRUE, stringsAsFactors=FALSE)
+
+
+meth.mtt.select.totxvi.b.ext <- subset (meth.mtt.select.totxvi.b, meth.mtt.select.totxvi.b$LC50.GROUP %in% c(1,3))
+
+meth.data.totxvi.cat.b.ext <- meth.data.totxvi.cat.b[,as.character(meth.mtt.select.totxvi.b.ext$MRN)]
+
+phenotype.totxvi.b <- meth.mtt.select.totxvi.b.ext$LC50.GROUP
+
+fisher.p.totxvi.b <- rep (NA, times=dim(meth.data.totxvi.cat.b.ext)[1])
+fisher.or.totxvi.b <- rep (NA, times=dim(meth.data.totxvi.cat.b.ext)[1])
+fisher.01.totxvi.b <- rep (NA, times=dim(meth.data.totxvi.cat.b.ext)[1])
+fisher.03.totxvi.b <- rep (NA, times=dim(meth.data.totxvi.cat.b.ext)[1])
+fisher.11.totxvi.b <- rep (NA, times=dim(meth.data.totxvi.cat.b.ext)[1])
+fisher.13.totxvi.b <- rep (NA, times=dim(meth.data.totxvi.cat.b.ext)[1])
+
+for (i in 1:nrow(meth.data.totxvi.cat.b.ext)){
+
+  x.totxvi.b <- meth.data.totxvi.cat.b.ext[i,]
+
+  fisher.freq.totxvi.b <- as.data.frame(table (factor(x.totxvi.b, levels=c(0,1)),factor(phenotype.totxvi.b, levels=c(1,3))), as.is=TRUE, stringsAsFactors=FALSE)$Freq
+  fisher.01.totxvi.b[i] <- fisher.freq.totxvi.b[1] 
+  fisher.11.totxvi.b[i] <- fisher.freq.totxvi.b[2] 
+  fisher.03.totxvi.b[i] <- fisher.freq.totxvi.b[3] 
+  fisher.13.totxvi.b[i] <- fisher.freq.totxvi.b[4] 
+  
+
+  if (min(table(x.totxvi.b))> 2 & length (table(x.totxvi.b)) >1){
+    totxvi.meth.result.temp <- fisher.test (table(x.totxvi.b,phenotype.totxvi.b))
+    fisher.p.totxvi.b[i] <- totxvi.meth.result.temp$p.value
+    fisher.or.totxvi.b[i] <- totxvi.meth.result.temp$estimate
+
+  }
+
+}
+
+
+
+meth.result.totxvi.b <- cbind (rownames (meth.data.totxvi.som), fisher.p.totxvi.b, fisher.or.totxvi.b, fisher.01.totxvi.b, fisher.03.totxvi.b, fisher.11.totxvi.b, fisher.13.totxvi.b, totxvi.meth.lm.p.b,  totxvi.meth.lm.stat.b)
+
+meth.result.totxvi.b <- as.data.frame(meth.result.totxvi.b, as.is=TRUE, stringsAsFactors=FALSE)
+
+colnames (meth.result.totxvi.b) <- c("IlmnID", "totxvi.fisher.p.b", "totxvi.fisher.or.b", "fisher.01.totxvi.b", "fisher.03.totxvi.b", "fisher.11.totxvi.b", "fisher.13.totxvi.b", "totxvi.meth.lm.p.b", "totxvi.meth.lm.stat.b")
+
+
+meth.result.totxvi.b$totxvi.fisher.p.b <- as.numeric (meth.result.totxvi.b$totxvi.fisher.p.b)
+meth.result.totxvi.b$totxvi.fisher.or.b <- as.numeric (meth.result.totxvi.b$totxvi.fisher.or.b)
+
+
+write.csv(meth.result.totxvi.b, file = "meth.result.totxvi.b.csv", row.names=FALSE, quote=FALSE)
+
+meth.anno.450 <- read.csv("/home/rautry/data/HumanMethylation450_15017482_v1-2.csv", header = TRUE, stringsAsFactors = FALSE)
+meth.anno.450 <- meth.anno.450[,c("IlmnID","UCSC_RefGene_Name","CHR","MAPINFO", "Probe_SNPs")]
+meth.totxvi.pred.b.anno<- merge(meth.result.totxvi.b,meth.anno.450, by = "IlmnID")
+write.csv(meth.totxvi.pred.b.anno, file = "meth.result.totxvi.b.anno.csv", row.names=FALSE, quote=FALSE)
+
+@
+
+
+
+
+
+
+
+<<methdatatotxvi.t, cache=TRUE>>=
+save.image("error.RData")
+mtt.select <- mtt.prep(drug)
+source("drugcatadjust.R")
+rownames(mtt.select) <- mtt.select$MRN
+
+mtt.select.t <- subset (mtt.select, mtt.select$LIN == "T")
+
+meth.pt.int.totxvi.t <- intersect (colnames (meth.data.totxvi.som), mtt.select.t$MRN)
+
+meth.mtt.select.totxvi.t <- mtt.select.t[as.character(meth.pt.int.totxvi.t),]
+
+meth.data.totxvi.t <- meth.data.totxvi.som[,as.character(meth.pt.int.totxvi.t)]
+
+meth.data.totxvi.cat.t <- ifelse (meth.data.totxvi.t < 0.25, 0, 1)
+meth.data.totxvi.cat.three.t <- ifelse (meth.data.totxvi.t <= 0.2, 0, ifelse(meth.data.totxvi.t < 0.6, 1, 2))
+
+meth.data.totxvi.cat.three.t <- as.data.frame(meth.data.totxvi.cat.three.t, as.is=TRUE, stringsAsFactors=FALSE)
+
+totxvi.meth.lm.p.t <- rep (NA, times=dim(meth.data.totxvi.cat.three.t)[1])
+totxvi.meth.lm.stat.t <- rep (NA, times=dim(meth.data.totxvi.cat.three.t)[1])
+
+for (i in 1:nrow(meth.data.totxvi.cat.three.t)){
+  if(length (table(unlist(meth.data.totxvi.cat.three.t[i,]))) >1){
+    curr.result <- summary(lm(log2(meth.mtt.select.totxvi.t$LC50)~unlist(meth.data.totxvi.cat.three.t[i,])))$coef[2,3:4]
+    totxvi.meth.lm.p.t[i] <- curr.result[2]
+    totxvi.meth.lm.stat.t[i] <- curr.result[1]
+  }
+}
+
+
+#totxvi.meth.lm.b <- cbind(rownames(meth.data.totxvi.cat.three.b), totxvi.meth.lm.p.b, totxvi.meth.lm.stat.b, stringsAsFactors=FALSE)
+#colnames (totxvi.meth.lm.b) <- c("IlmnID", "totxvi.meth.lm.p.b", "totxvi.meth.lm.stat.b")
+
+#totxvi.meth.lm.b <- as.data.frame(totxvi.meth.lm.b, as.is=TRUE, stringsAsFactors=FALSE)
+
+
+meth.mtt.select.totxvi.t.ext <- subset (meth.mtt.select.totxvi.t, meth.mtt.select.totxvi.t$LC50.GROUP %in% c(1,3))
+
+meth.data.totxvi.cat.t.ext <- meth.data.totxvi.cat.t[,as.character(meth.mtt.select.totxvi.t.ext$MRN)]
+
+phenotype.totxvi.t <- meth.mtt.select.totxvi.t.ext$LC50.GROUP
+
+fisher.p.totxvi.t <- rep (NA, times=dim(meth.data.totxvi.cat.t.ext)[1])
+fisher.or.totxvi.t <- rep (NA, times=dim(meth.data.totxvi.cat.t.ext)[1])
+fisher.01.totxvi.t <- rep (NA, times=dim(meth.data.totxvi.cat.t.ext)[1])
+fisher.03.totxvi.t <- rep (NA, times=dim(meth.data.totxvi.cat.t.ext)[1])
+fisher.11.totxvi.t <- rep (NA, times=dim(meth.data.totxvi.cat.t.ext)[1])
+fisher.13.totxvi.t <- rep (NA, times=dim(meth.data.totxvi.cat.t.ext)[1])
+
+for (i in 1:nrow(meth.data.totxvi.cat.t.ext)){
+
+  x.totxvi.t <- meth.data.totxvi.cat.t.ext[i,]
+
+  fisher.freq.totxvi.t <- as.data.frame(table (factor(x.totxvi.t, levels=c(0,1)),factor(phenotype.totxvi.t, levels=c(1,3))), as.is=TRUE, stringsAsFactors=FALSE)$Freq
+  fisher.01.totxvi.t[i] <- fisher.freq.totxvi.t[1] 
+  fisher.11.totxvi.t[i] <- fisher.freq.totxvi.t[2] 
+  fisher.03.totxvi.t[i] <- fisher.freq.totxvi.t[3] 
+  fisher.13.totxvi.t[i] <- fisher.freq.totxvi.t[4] 
+  
+
+  if (min(table(x.totxvi.t))> 2 & length (table(x.totxvi.t)) >1){
+    totxvi.meth.result.temp <- fisher.test (table(x.totxvi.t,phenotype.totxvi.t))
+    fisher.p.totxvi.t[i] <- totxvi.meth.result.temp$p.value
+    fisher.or.totxvi.t[i] <- totxvi.meth.result.temp$estimate
+
+  }
+
+}
+
+
+
+meth.result.totxvi.t <- cbind (rownames (meth.data.totxvi.som), fisher.p.totxvi.t, fisher.or.totxvi.t, fisher.01.totxvi.t, fisher.03.totxvi.t, fisher.11.totxvi.t, fisher.13.totxvi.t, totxvi.meth.lm.p.t,  totxvi.meth.lm.stat.t)
+
+meth.result.totxvi.t <- as.data.frame(meth.result.totxvi.t, as.is=TRUE, stringsAsFactors=FALSE)
+
+colnames (meth.result.totxvi.t) <- c("IlmnID", "totxvi.fisher.p.t", "totxvi.fisher.or.t", "fisher.01.totxvi.t", "fisher.03.totxvi.t", "fisher.11.totxvi.t", "fisher.13.totxvi.t", "totxvi.meth.lm.p.t", "totxvi.meth.lm.stat.t")
+
+
+meth.result.totxvi.t$totxvi.fisher.p.t <- as.numeric (meth.result.totxvi.t$totxvi.fisher.p.t)
+meth.result.totxvi.t$totxvi.fisher.or.t <- as.numeric (meth.result.totxvi.t$totxvi.fisher.or.t)
+
+
+write.csv(meth.result.totxvi.t, file = "meth.result.totxvi.t.csv", row.names=FALSE, quote=FALSE)
+meth.anno.450 <- read.csv("/home/rautry/data/HumanMethylation450_15017482_v1-2.csv", header = TRUE, stringsAsFactors = FALSE)
+meth.anno.450 <- meth.anno.450[,c("IlmnID","UCSC_RefGene_Name","CHR","MAPINFO", "Probe_SNPs")]
+meth.totxvi.pred.t.anno<- merge(meth.result.totxvi.t,meth.anno.450, by = "IlmnID")
+write.csv(meth.totxvi.pred.t.anno, file = "meth.result.totxvi.t.anno.csv", row.names=FALSE, quote=FALSE)
+
+@
+
+
+
+
+
+<<methlmall.bt, cache=TRUE>>=
+
+common.meth.probes <- intersect(rownames(meth.data.totxv.cat.three.bt), rownames (meth.data.totxvi.cat.three.bt))
+
+
+all.meth.bt <- cbind (meth.data.totxv.cat.three.bt[common.meth.probes,], meth.data.totxvi.cat.three.bt[common.meth.probes,])
+all.meth.pheno.bt <- c(meth.mtt.select.totxv.bt$LC50, meth.mtt.select.totxvi.bt$LC50)
+all.meth.prot.bt <- as.factor(c(rep("TOTXV", times=length(meth.mtt.select.totxv.bt$LC50)), rep("TOTXVI", times=length(meth.mtt.select.totxvi.bt$LC50))))
+
+all.meth.lm.p.bt <- rep (NA, times=dim(all.meth.bt)[1])
+all.meth.lm.stat.bt <- rep (NA, times=dim(all.meth.bt)[1])
+
+for (i in 1:nrow(all.meth.bt)){
+  if(length (table(unlist(all.meth.bt[i,]))) >1){
+    curr.result <- summary(lm(log2(all.meth.pheno.bt)~unlist(all.meth.bt[i,])+all.meth.prot.bt))$coef[2,3:4]
+    all.meth.lm.p.bt[i] <- curr.result[2]
+    all.meth.lm.stat.bt[i] <- curr.result[1]
+  }
+}
+
+###
+all.meth.lm.bt <- cbind(rownames(all.meth.bt), all.meth.lm.p.bt, all.meth.lm.stat.bt)
+
+all.meth.lm.bt <- as.data.frame(all.meth.lm.bt, as.is=TRUE, stringsAsFactors=FALSE)
+
+
+colnames (all.meth.lm.bt) <- c("IlmnID", "all.lm.meth.p.bt", "all.lm.meth.stat.bt")
+rownames(all.meth.lm.bt) <- all.meth.lm.bt$IlmnID
+
+@
+
+
+
+
+<<methlmall.b, cache=TRUE>>=
+
+common.meth.probes <- intersect(rownames(meth.data.totxv.cat.three.b), rownames (meth.data.totxvi.cat.three.b))
+
+
+all.meth.b <- cbind (meth.data.totxv.cat.three.b[common.meth.probes,], meth.data.totxvi.cat.three.b[common.meth.probes,])
+all.meth.pheno.b <- c(meth.mtt.select.totxv.b$LC50, meth.mtt.select.totxvi.b$LC50)
+all.meth.prot.b <- as.factor(c(rep("TOTXV", times=length(meth.mtt.select.totxv.b$LC50)), rep("TOTXVI", times=length(meth.mtt.select.totxvi.b$LC50))))
+
+all.meth.lm.p.b <- rep (NA, times=dim(all.meth.b)[1])
+all.meth.lm.stat.b <- rep (NA, times=dim(all.meth.b)[1])
+
+for (i in 1:nrow(all.meth.b)){
+  if(length (table(unlist(all.meth.b[i,]))) >1){
+    curr.result <- summary(lm(log2(all.meth.pheno.b)~unlist(all.meth.b[i,])+all.meth.prot.b))$coef[2,3:4]
+    all.meth.lm.p.b[i] <- curr.result[2]
+    all.meth.lm.stat.b[i] <- curr.result[1]
+  }
+}
+
+###
+all.meth.lm.b <- cbind(rownames(all.meth.b), all.meth.lm.p.b, all.meth.lm.stat.b)
+
+all.meth.lm.b <- as.data.frame(all.meth.lm.b, as.is=TRUE, stringsAsFactors=FALSE)
+
+
+colnames (all.meth.lm.b) <- c("IlmnID", "all.lm.meth.p.b", "all.lm.meth.stat.b")
+rownames(all.meth.lm.b) <- all.meth.lm.b$IlmnID
+
+@
+
+
+
+
+
+<<methlmall.t, cache=TRUE>>=
+
+common.meth.probes <- intersect(rownames(meth.data.totxv.cat.three.t), rownames (meth.data.totxvi.cat.three.t))
+
+
+all.meth.t <- cbind (meth.data.totxv.cat.three.t[common.meth.probes,], meth.data.totxvi.cat.three.t[common.meth.probes,])
+all.meth.pheno.t <- c(meth.mtt.select.totxv.t$LC50, meth.mtt.select.totxvi.t$LC50)
+all.meth.prot.t <- as.factor(c(rep("TOTXV", times=length(meth.mtt.select.totxv.t$LC50)), rep("TOTXVI", times=length(meth.mtt.select.totxvi.t$LC50))))
+
+all.meth.lm.p.t <- rep (NA, times=dim(all.meth.t)[1])
+all.meth.lm.stat.t <- rep (NA, times=dim(all.meth.t)[1])
+
+for (i in 1:nrow(all.meth.t)){
+  if(length (table(unlist(all.meth.t[i,]))) >1){
+    curr.result <- summary(lm(log2(all.meth.pheno.t)~unlist(all.meth.t[i,])+all.meth.prot.t))$coef[2,3:4]
+    all.meth.lm.p.t[i] <- curr.result[2]
+    all.meth.lm.stat.t[i] <- curr.result[1]
+  }
+}
+
+###
+all.meth.lm.t <- cbind(rownames(all.meth.t), all.meth.lm.p.t, all.meth.lm.stat.t)
+
+all.meth.lm.t <- as.data.frame(all.meth.lm.t, as.is=TRUE, stringsAsFactors=FALSE)
+
+
+colnames (all.meth.lm.t) <- c("IlmnID", "all.lm.meth.p.t", "all.lm.meth.stat.t")
+rownames(all.meth.lm.t) <- all.meth.lm.t$IlmnID
+save.image("methsection.RData")
+@
+
+
+
+
+
+
+<<methmerge, cache=TRUE>>=
+
+meth.result.totxv <- merge (meth.result.totxv.b, meth.result.totxv.t)
+meth.result.totxv <- merge (meth.result.totxv, meth.result.totxv.bt)
+
+meth.result.totxvi <- merge (meth.result.totxvi.b, meth.result.totxvi.t)
+meth.result.totxvi <- merge (meth.result.totxvi, meth.result.totxvi.bt)
+
+
+meth.result.all <- merge (meth.result.totxv, meth.result.totxvi)
+meth.result.all <- merge (meth.result.all, all.meth.lm.b)
+
+meth.result.all$fisher.01.totxv.b <- as.numeric(meth.result.all$fisher.01.totxv.b)
+meth.result.all$fisher.03.totxv.b <- as.numeric(meth.result.all$fisher.03.totxv.b)
+meth.result.all$fisher.11.totxv.b <- as.numeric(meth.result.all$fisher.11.totxv.b)
+meth.result.all$fisher.13.totxv.b <- as.numeric(meth.result.all$fisher.13.totxv.b)
+meth.result.all$fisher.01.totxvi.b <- as.numeric(meth.result.all$fisher.01.totxvi.b)
+meth.result.all$fisher.03.totxvi.b <- as.numeric(meth.result.all$fisher.03.totxvi.b)
+meth.result.all$fisher.11.totxvi.b <- as.numeric(meth.result.all$fisher.11.totxvi.b)
+meth.result.all$fisher.13.totxvi.b <- as.numeric(meth.result.all$fisher.13.totxvi.b)
+
+@ 
+
+<<methmeta, cache=TRUE>>=
+#fisher test statistics are compiled into a 2x2x2 array and performing a cochran-mantel-Haenszel Chi-Square test for count data of the null that two nominal variables are conditionally independent in each stratum assuming that there is no three way interaction
+for (i in 1:nrow(meth.result.all)){
+  totxv.meth.matrix <- matrix(c(meth.result.all[i,"fisher.01.totxv.b"], meth.result.all[i,"fisher.03.totxv.b"], meth.result.all[i,"fisher.11.totxv.b"], meth.result.all[i,"fisher.13.totxv.b"]), nrow=2, byrow=TRUE) 
+  totxvi.meth.matrix <- matrix(c(meth.result.all[i,"fisher.01.totxvi.b"], meth.result.all[i,"fisher.03.totxvi.b"], meth.result.all[i,"fisher.11.totxvi.b"], meth.result.all[i,"fisher.13.totxvi.b"]), nrow=2, byrow=TRUE) 
+
+  metharray <- array(c(totxv.meth.matrix,totxvi.meth.matrix), dim=c(2,2,2))
+
+  meth.result.all[i,"cmh.meta"] <- cmh.test (metharray)$parameter["p-value"]
+}
+
+meth.result.all$p.b <- meth.result.all$all.lm.meth.p.b
+meth.result.all$stat.b <- meth.result.all$all.lm.meth.stat.b
+
+write.table (meth.result.all, file="meth_lc50.tsv", row.names=FALSE, quote=FALSE, sep="\t")
+@
+
+\end{document}

@@ -1,0 +1,470 @@
+\documentclass{article}
+\usepackage[nottoc,numbib]{tocbibind}
+\usepackage{Sweave}
+\usepackage{color}
+\usepackage{amsmath}
+\usepackage{mathtools}
+\usepackage{rotating}
+\usepackage{multirow}
+\usepackage{amscd}
+\usepackage[tableposition=top]{caption}
+\usepackage{ifthen}
+\usepackage[utf8]{inputenc}
+
+
+\renewcommand{\rmdefault}{phv} % Arial font
+\renewcommand{\sfdefault}{phv} % Arial font
+\usepackage[left=1in,top=1in,right=1in,bottom=1in]{geometry} %margins
+\usepackage{longtable}
+\setlength{\parindent}{0in}
+\usepackage{graphicx}
+\usepackage{pdflscape}
+\usepackage{lscape}
+
+\usepackage{lastpage} % for the number of the last page in the document
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+
+\rhead{Section \thesubsection}
+\rfoot{Page \thepage\ of \pageref{LastPage}}
+\usepackage{verbatim}
+
+\begin{document}
+
+\pagebreak[4]
+
+<<loadpackages>>=
+
+r.lib <- "/home/rautry/drworkflow_Rlib"
+#"/nfs_exports/apps/pharmsci/evans_lab/Rlib"
+require (EvansData, lib.loc=r.lib)
+require (EvansAnalysis, lib.loc=r.lib)
+require (SJHMGEData, lib.loc=r.lib)
+require (xtable, lib.loc=r.lib)
+
+require (mvtnorm, lib.loc=r.lib)
+require (modeltools, lib.loc=r.lib)
+require (coin, lib.loc=r.lib)
+
+require (mvtnorm, lib.loc=r.lib)
+require (VGAM, lib.loc=r.lib)
+require (lawstat, lib.loc=r.lib)
+require (KernSmooth, lib.loc=r.lib)
+
+require (gtools, lib.loc=r.lib)
+require (gdata, lib.loc=r.lib)
+require (bitops, lib.loc=r.lib)
+require (caTools, lib.loc=r.lib)
+require (gplots, lib.loc=r.lib)
+require (amap, lib.loc=r.lib)
+require (survival, lib.loc=r.lib)
+
+@
+
+
+<<drugselect, cache=TRUE>>=
+wd <- getwd()
+wdsplit <- unlist (strsplit (wd, "/"))
+drug <- wdsplit[length(wdsplit)]
+drug
+@ 
+
+<<totxv.mir.bt, cache=TRUE>>=
+mtt.select <- mtt.prep(drug)
+source("drugcatadjust.R")
+#TODO(spaugh): Remove "mir" from column names
+totxv.mir.mtt.select.bt <- subset (mtt.select, mtt.select$LIN %in% c("B", "T"))
+totxv.mir.select.bt <- intersect (colnames (mir.data.totxv.som), totxv.mir.mtt.select.bt$MRN)
+totxv.mirdata.bt <- mir.data.totxv.som[,as.character(totxv.mir.select.bt)]
+rownames(mtt.select) <- mtt.select$MRN
+totxv.mtt.select.mir.bt <- mtt.select[as.character(totxv.mir.select.bt),]
+
+
+totxv.mir.lm.bt <- t(apply(totxv.mirdata.bt, 1, function(x){summary(lm(log2(totxv.mtt.select.mir.bt$LC50)~x))$coef}[2,3:4]))
+
+totxv.mir.lm.bt <- as.data.frame(totxv.mir.lm.bt, as.is=TRUE, stringsAsFactors=FALSE)
+totxv.mir.lm.bt$Name <- rownames(totxv.mir.lm.bt)
+totxv.mir.lm.bt <- totxv.mir.lm.bt[,3:1]
+colnames (totxv.mir.lm.bt) <- c("Name", "totxv.mir.lm.p.bt", "totxv.mir.lm.stat.bt")
+
+
+totxv.mir.t.p.bt <- apply(totxv.mirdata.bt,1,function(x){t.test(x[totxv.mtt.select.mir.bt$LC50.GROUP==3], x[totxv.mtt.select.mir.bt$LC50.GROUP==1], na.action=na.rm)$p.value})
+totxv.mir.t.stat.bt <-  apply(totxv.mirdata.bt,1,function(x){t.test(x[totxv.mtt.select.mir.bt$LC50.GROUP==3], x[totxv.mtt.select.mir.bt$LC50.GROUP==1], na.action=na.rm)$statistic})
+
+totxv.mir.w.p.bt <- rep (NA, times=nrow(totxv.mirdata.bt))
+totxv.mir.w.stat.bt <- rep (NA, times=nrow(totxv.mirdata.bt))
+
+for (i in 1:nrow(totxv.mirdata.bt)){
+  result.mir <- wilcox_test(unlist(totxv.mirdata.bt[i,totxv.mtt.select.mir.bt$LC50.GROUP %in% c(1,3)])~factor(totxv.mtt.select.mir.bt[totxv.mtt.select.mir.bt$LC50.GROUP %in% c(1,3),"LC50.GROUP"], levels=c(3,1)), distribution="exact")
+  totxv.mir.w.p.bt[i]  <- pvalue (result.mir)
+  totxv.mir.w.stat.bt[i] <- statistic (result.mir)
+}
+
+totxv.mir.result.bt <- as.data.frame(cbind(totxv.mir.lm.bt, totxv.mir.t.p.bt, totxv.mir.t.stat.bt, totxv.mir.w.p.bt, totxv.mir.w.stat.bt))
+
+totxv.mir.result.bt$totxv.max.p.bt <- apply (totxv.mir.result.bt[,c("totxv.mir.lm.p.bt", "totxv.mir.t.p.bt","totxv.mir.w.p.bt")], 1, function (x){max(x, na.rm=TRUE)})
+
+@ 
+
+
+
+
+
+<<totxv.mir.b, cache=TRUE>>=
+mtt.select <- mtt.prep(drug)
+source("drugcatadjust.R")
+totxv.mir.mtt.select.b <- subset (mtt.select, mtt.select$LIN == "B")
+totxv.mir.select.b <- intersect (colnames (mir.data.totxv.som), totxv.mir.mtt.select.b$MRN)
+totxv.mirdata.b <- mir.data.totxv.som[,as.character(totxv.mir.select.b)]
+rownames(mtt.select) <- mtt.select$MRN
+totxv.mtt.select.mir.b <- mtt.select[as.character(totxv.mir.select.b),]
+
+
+totxv.mir.lm.b <- t(apply(totxv.mirdata.b, 1, function(x){summary(lm(log2(totxv.mtt.select.mir.b$LC50)~x))$coef}[2,3:4]))
+
+totxv.mir.lm.b <- as.data.frame(totxv.mir.lm.b, as.is=TRUE, stringsAsFactors=FALSE)
+totxv.mir.lm.b$Name <- rownames(totxv.mir.lm.b)
+totxv.mir.lm.b <- totxv.mir.lm.b[,3:1]
+colnames (totxv.mir.lm.b) <- c("Name", "totxv.mir.lm.p.b", "totxv.mir.lm.stat.b")
+
+
+totxv.mir.t.p.b <- apply(totxv.mirdata.b,1,function(x){t.test(x[totxv.mtt.select.mir.b$LC50.GROUP==3], x[totxv.mtt.select.mir.b$LC50.GROUP==1], na.action=na.rm)$p.value})
+totxv.mir.t.stat.b <-  apply(totxv.mirdata.b,1,function(x){t.test(x[totxv.mtt.select.mir.b$LC50.GROUP==3], x[totxv.mtt.select.mir.b$LC50.GROUP==1], na.action=na.rm)$statistic})
+
+totxv.mir.w.p.b <- rep (NA, times=nrow(totxv.mirdata.b))
+totxv.mir.w.stat.b <- rep (NA, times=nrow(totxv.mirdata.b))
+
+for (i in 1:nrow(totxv.mirdata.b)){
+  result.mir <- wilcox_test(unlist(totxv.mirdata.b[i,totxv.mtt.select.mir.b$LC50.GROUP %in% c(1,3)])~factor(totxv.mtt.select.mir.b[totxv.mtt.select.mir.b$LC50.GROUP %in% c(1,3),"LC50.GROUP"], levels=c(3,1)), distribution="exact")
+  totxv.mir.w.p.b[i]  <- pvalue (result.mir)
+  totxv.mir.w.stat.b[i] <- statistic (result.mir)
+}
+
+totxv.mir.result.b <- as.data.frame(cbind(totxv.mir.lm.b, totxv.mir.t.p.b, totxv.mir.t.stat.b, totxv.mir.w.p.b, totxv.mir.w.stat.b))
+
+totxv.mir.result.b$totxv.max.p.b <- apply (totxv.mir.result.b[,c("totxv.mir.lm.p.b", "totxv.mir.t.p.b","totxv.mir.w.p.b")], 1, function (x){max(x, na.rm=TRUE)})
+
+@ 
+
+
+
+<<totxv.mir.t, cache=TRUE>>=
+mtt.select <- mtt.prep(drug)
+source("drugcatadjust.R")
+totxv.mir.mtt.select.t <- subset (mtt.select, mtt.select$LIN == "T")
+totxv.mir.select.t <- intersect (colnames (mir.data.totxv.som), totxv.mir.mtt.select.t$MRN)
+totxv.mirdata.t <- mir.data.totxv.som[,as.character(totxv.mir.select.t)]
+rownames(mtt.select) <- mtt.select$MRN
+totxv.mtt.select.mir.t <- mtt.select[as.character(totxv.mir.select.t),]
+
+
+totxv.mir.lm.t <- t(apply(totxv.mirdata.t, 1, function(x){summary(lm(log2(totxv.mtt.select.mir.t$LC50)~x))$coef}[2,3:4]))
+
+totxv.mir.lm.t <- as.data.frame(totxv.mir.lm.t, as.is=TRUE, stringsAsFactors=FALSE)
+totxv.mir.lm.t$Name <- rownames(totxv.mir.lm.t)
+totxv.mir.lm.t <- totxv.mir.lm.t[,3:1]
+colnames (totxv.mir.lm.t) <- c("Name", "totxv.mir.lm.p.t", "totxv.mir.lm.stat.t")
+
+if (!(drug %in% c("DEX", "6MP", "LASP", "VCR"))){
+totxv.mir.t.p.t <- apply(totxv.mirdata.t,1,function(x){t.test(x[totxv.mtt.select.mir.t$LC50.GROUP==3], x[totxv.mtt.select.mir.t$LC50.GROUP==1], na.action=na.rm)$p.value})
+totxv.mir.t.stat.t <-  apply(totxv.mirdata.t,1,function(x){t.test(x[totxv.mtt.select.mir.t$LC50.GROUP==3], x[totxv.mtt.select.mir.t$LC50.GROUP==1], na.action=na.rm)$statistic})
+
+totxv.mir.w.p.t <- rep (NA, times=nrow(totxv.mirdata.t))
+totxv.mir.w.stat.t <- rep (NA, times=nrow(totxv.mirdata.t))
+
+for (i in 1:nrow(totxv.mirdata.t)){
+  result.mir <- wilcox_test(unlist(totxv.mirdata.t[i,totxv.mtt.select.mir.t$LC50.GROUP %in% c(1,3)])~factor(totxv.mtt.select.mir.t[totxv.mtt.select.mir.t$LC50.GROUP %in% c(1,3),"LC50.GROUP"], levels=c(3,1)), distribution="exact")
+  totxv.mir.w.p.t[i]  <- pvalue (result.mir)
+  totxv.mir.w.stat.t[i] <- statistic (result.mir)
+}
+}
+if (drug %in% c("DEX", "6MP", "LASP", "VCR")){
+totxv.mir.t.p.t <- rep (NA, times=nrow(totxv.mirdata.t))
+totxv.mir.t.stat.t <- rep (NA, times=nrow(totxv.mirdata.t))
+
+totxv.mir.w.p.t <- rep (NA, times=nrow(totxv.mirdata.t))
+totxv.mir.w.stat.t <- rep (NA, times=nrow(totxv.mirdata.t))
+}
+
+totxv.mir.result.t <- as.data.frame(cbind(totxv.mir.lm.t, totxv.mir.t.p.t, totxv.mir.t.stat.t, totxv.mir.w.p.t, totxv.mir.w.stat.t))
+
+totxv.mir.result.t$totxv.max.p.t <- apply (totxv.mir.result.t[,c("totxv.mir.lm.p.t", "totxv.mir.t.p.t","totxv.mir.w.p.t")], 1, function (x){max(x, na.rm=TRUE)})
+
+@ 
+
+<<totxv.mir.merge, cache=TRUE>>=
+totxv.mir.result <- merge (totxv.mir.result.bt, totxv.mir.result.b)
+totxv.mir.result <- merge (totxv.mir.result, totxv.mir.result.t)
+
+
+write.table (totxv.mir.result, file="totxv_mir_lc50.tsv", row.names=FALSE, quote=FALSE, sep="\t")
+@ 
+
+
+
+
+
+<<totxvi.mir.bt, cache=TRUE>>=
+mtt.select <- mtt.prep(drug)
+source("drugcatadjust.R")
+totxvi.mir.mtt.select.bt <- subset (mtt.select, mtt.select$LIN %in% c("B", "T"))
+
+totxvi.mir.select.bt <- intersect (colnames (mir.data.totxvi.som), totxvi.mir.mtt.select.bt$MRN)
+
+totxvi.mirdata.bt <- mir.data.totxvi.som[,as.character(totxvi.mir.select.bt)]
+
+rownames(mtt.select) <- mtt.select$MRN
+
+totxvi.mtt.select.mir.bt <- mtt.select[as.character(totxvi.mir.select.bt),]
+
+totxvi.mir.lm.bt <- t(apply(totxvi.mirdata.bt, 1, function(x){summary(lm(log2(totxvi.mtt.select.mir.bt$LC50)~x))$coef}[2,3:4]))
+
+totxvi.mir.lm.bt <- as.data.frame(totxvi.mir.lm.bt, as.is=TRUE, stringsAsFactors=FALSE)
+totxvi.mir.lm.bt$Name <- rownames(totxvi.mir.lm.bt)
+totxvi.mir.lm.bt <- totxvi.mir.lm.bt[,3:1]
+colnames (totxvi.mir.lm.bt) <- c("Name", "totxvi.mir.lm.p.bt", "totxvi.mir.lm.stat.bt")
+
+
+totxvi.mir.t.p.bt <- apply(totxvi.mirdata.bt,1,function(x){t.test(x[totxvi.mtt.select.mir.bt$LC50.GROUP==3], x[totxvi.mtt.select.mir.bt$LC50.GROUP==1], na.action=na.rm)$p.value})
+totxvi.mir.t.stat.bt <-  apply(totxvi.mirdata.bt,1,function(x){t.test(x[totxvi.mtt.select.mir.bt$LC50.GROUP==3], x[totxvi.mtt.select.mir.bt$LC50.GROUP==1], na.action=na.rm)$statistic})
+
+totxvi.mir.w.p.bt <- rep (NA, times=nrow(totxvi.mirdata.bt))
+totxvi.mir.w.stat.bt <- rep (NA, times=nrow(totxvi.mirdata.bt))
+
+for (i in 1:nrow(totxvi.mirdata.bt)){
+  result.mir <- wilcox_test(unlist(totxvi.mirdata.bt[i,totxvi.mtt.select.mir.bt$LC50.GROUP %in% c(1,3)])~factor(totxvi.mtt.select.mir.bt[totxvi.mtt.select.mir.bt$LC50.GROUP %in% c(1,3),"LC50.GROUP"], levels=c(3,1)), distribution="exact")
+  totxvi.mir.w.p.bt[i]  <- pvalue (result.mir)
+  totxvi.mir.w.stat.bt[i] <- statistic (result.mir)
+}
+
+totxvi.mir.result.bt <- as.data.frame(cbind(totxvi.mir.lm.bt, totxvi.mir.t.p.bt, totxvi.mir.t.stat.bt, totxvi.mir.w.p.bt, totxvi.mir.w.stat.bt))
+
+totxvi.mir.result.bt$totxvi.max.p.bt <- apply (totxvi.mir.result.bt[,c("totxvi.mir.lm.p.bt","totxvi.mir.t.p.bt","totxvi.mir.w.p.bt")], 1, function (x){max(x, na.rm=TRUE)})
+
+@ 
+
+
+
+<<totxvi.mir.b, cache=TRUE>>=
+mtt.select <- mtt.prep(drug)
+source("drugcatadjust.R")
+totxvi.mir.mtt.select.b <- subset (mtt.select, mtt.select$LIN == "B")
+
+totxvi.mir.select.b <- intersect (colnames (mir.data.totxvi.som), totxvi.mir.mtt.select.b$MRN)
+
+totxvi.mirdata.b <- mir.data.totxvi.som[,as.character(totxvi.mir.select.b)]
+
+rownames(mtt.select) <- mtt.select$MRN
+
+totxvi.mtt.select.mir.b <- mtt.select[as.character(totxvi.mir.select.b),]
+## Applying function over rows to linear model with out protocol as a covariate?
+totxvi.mir.lm.b <- t(apply(totxvi.mirdata.b, 1, function(x){summary(lm(log2(totxvi.mtt.select.mir.b$LC50)~x))$coef}[2,3:4]))
+
+totxvi.mir.lm.b <- as.data.frame(totxvi.mir.lm.b, as.is=TRUE, stringsAsFactors=FALSE)
+totxvi.mir.lm.b$Name <- rownames(totxvi.mir.lm.b)
+totxvi.mir.lm.b <- totxvi.mir.lm.b[,3:1]
+colnames (totxvi.mir.lm.b) <- c("Name", "totxvi.mir.lm.p.b", "totxvi.mir.lm.stat.b")
+
+
+totxvi.mir.t.p.b <- apply(totxvi.mirdata.b,1,function(x){t.test(x[totxvi.mtt.select.mir.b$LC50.GROUP==3], x[totxvi.mtt.select.mir.b$LC50.GROUP==1], na.action=na.rm)$p.value})
+totxvi.mir.t.stat.b <-  apply(totxvi.mirdata.b,1,function(x){t.test(x[totxvi.mtt.select.mir.b$LC50.GROUP==3], x[totxvi.mtt.select.mir.b$LC50.GROUP==1], na.action=na.rm)$statistic})
+
+totxvi.mir.w.p.b <- rep (NA, times=nrow(totxvi.mirdata.b))
+totxvi.mir.w.stat.b <- rep (NA, times=nrow(totxvi.mirdata.b))
+
+for (i in 1:nrow(totxvi.mirdata.b)){
+  result.mir <- wilcox_test(unlist(totxvi.mirdata.b[i,totxvi.mtt.select.mir.b$LC50.GROUP %in% c(1,3)])~factor(totxvi.mtt.select.mir.b[totxvi.mtt.select.mir.b$LC50.GROUP %in% c(1,3),"LC50.GROUP"], levels=c(3,1)), distribution="exact")
+  totxvi.mir.w.p.b[i]  <- pvalue (result.mir)
+  totxvi.mir.w.stat.b[i] <- statistic (result.mir)
+}
+
+totxvi.mir.result.b <- as.data.frame(cbind(totxvi.mir.lm.b, totxvi.mir.t.p.b, totxvi.mir.t.stat.b, totxvi.mir.w.p.b, totxvi.mir.w.stat.b))
+
+totxvi.mir.result.b$totxvi.max.p.b <- apply (totxvi.mir.result.b[,c("totxvi.mir.lm.p.b","totxvi.mir.t.p.b","totxvi.mir.w.p.b")], 1, function (x){max(x, na.rm=TRUE)})
+
+@ 
+
+
+
+<<totxvi.mir.t, cache=TRUE>>=
+mtt.select <- mtt.prep(drug)
+source("drugcatadjust.R")
+totxvi.mir.mtt.select.t <- subset (mtt.select, mtt.select$LIN == "T")
+
+totxvi.mir.select.t <- intersect (colnames (mir.data.totxvi.som), totxvi.mir.mtt.select.t$MRN)
+
+totxvi.mirdata.t <- mir.data.totxvi.som[,as.character(totxvi.mir.select.t)]
+
+rownames(mtt.select) <- mtt.select$MRN
+
+totxvi.mtt.select.mir.t <- mtt.select[as.character(totxvi.mir.select.t),]
+
+totxvi.mir.lm.t <- t(apply(totxvi.mirdata.t, 1, function(x){summary(lm(log2(totxvi.mtt.select.mir.t$LC50)~x))$coef}[2,3:4]))
+
+totxvi.mir.lm.t <- as.data.frame(totxvi.mir.lm.t, as.is=TRUE, stringsAsFactors=FALSE)
+totxvi.mir.lm.t$Name <- rownames(totxvi.mir.lm.t)
+totxvi.mir.lm.t <- totxvi.mir.lm.t[,3:1]
+colnames (totxvi.mir.lm.t) <- c("Name", "totxvi.mir.lm.p.t", "totxvi.mir.lm.stat.t")
+
+if (!(drug %in% c("DEX", "6MP", "LASP", "VCR"))){
+totxvi.mir.t.p.t <- apply(totxvi.mirdata.t,1,function(x){t.test(x[totxvi.mtt.select.mir.t$LC50.GROUP==3], x[totxvi.mtt.select.mir.t$LC50.GROUP==1], na.action=na.rm)$p.value})
+totxvi.mir.t.stat.t <-  apply(totxvi.mirdata.t,1,function(x){t.test(x[totxvi.mtt.select.mir.t$LC50.GROUP==3], x[totxvi.mtt.select.mir.t$LC50.GROUP==1], na.action=na.rm)$statistic})
+
+totxvi.mir.w.p.t <- rep (NA, times=nrow(totxvi.mirdata.t))
+totxvi.mir.w.stat.t <- rep (NA, times=nrow(totxvi.mirdata.t))
+
+for (i in 1:nrow(totxvi.mirdata.t)){
+  result.mir <- wilcox_test(unlist(totxvi.mirdata.t[i,totxvi.mtt.select.mir.t$LC50.GROUP %in% c(1,3)])~factor(totxvi.mtt.select.mir.t[totxvi.mtt.select.mir.t$LC50.GROUP %in% c(1,3),"LC50.GROUP"], levels=c(3,1)), distribution="exact")
+  totxvi.mir.w.p.t[i]  <- pvalue (result.mir)
+  totxvi.mir.w.stat.t[i] <- statistic (result.mir)
+}
+}
+if (drug %in% c("DEX", "6MP", "LASP", "VCR")){
+totxvi.mir.t.p.t <- rep (NA, times=nrow(totxvi.mirdata.t))
+totxvi.mir.t.stat.t <- rep (NA, times=nrow(totxvi.mirdata.t))
+
+totxvi.mir.w.p.t <- rep (NA, times=nrow(totxvi.mirdata.t))
+totxvi.mir.w.stat.t <- rep (NA, times=nrow(totxvi.mirdata.t))
+}
+totxvi.mir.result.t <- as.data.frame(cbind(totxvi.mir.lm.t, totxvi.mir.t.p.t, totxvi.mir.t.stat.t, totxvi.mir.w.p.t, totxvi.mir.w.stat.t))
+
+totxvi.mir.result.t$totxvi.max.p.t <- apply (totxvi.mir.result.t[,c("totxvi.mir.lm.p.t","totxvi.mir.t.p.t","totxvi.mir.w.p.t")], 1, function (x){max(x, na.rm=TRUE)})
+
+@ 
+
+
+
+<<totxvi.mir.merge, cache=TRUE>>=
+totxvi.mir.result <- merge (totxvi.mir.result.bt, totxvi.mir.result.b)
+totxvi.mir.result <- merge (totxvi.mir.result, totxvi.mir.result.t)
+write.table (totxvi.mir.result, file="totxvi_mir_lc50.tsv", row.names=FALSE, quote=FALSE, sep="\t")
+@ 
+
+
+<<mirlmall.bt, cache=TRUE>>=
+totxv.mirdata.bt.all <- totxv.mirdata.bt
+totxv.mirdata.bt.all <- as.data.frame (totxv.mirdata.bt.all, as.is=TRUE, stringsAsFactors=FALSE)
+totxv.mirdata.bt.all$Name <- rownames (totxv.mirdata.bt.all)
+
+totxvi.mirdata.bt.all <- totxvi.mirdata.bt
+totxvi.mirdata.bt.all <- as.data.frame (totxvi.mirdata.bt.all, as.is=TRUE, stringsAsFactors=FALSE)
+totxvi.mirdata.bt.all$Name <- rownames (totxvi.mirdata.bt.all)
+
+all.mir.bt <- merge(totxv.mirdata.bt.all, totxvi.mirdata.bt.all)
+rownames(all.mir.bt) <- all.mir.bt$Name
+all.mir.bt$Name <- NULL
+
+all.mir.pheno.bt <- c(totxv.mtt.select.mir.bt$LC50, totxvi.mtt.select.mir.bt$LC50)
+all.mir.prot.bt <- as.factor(c(rep("TOTXV", times=length(totxv.mtt.select.mir.bt$LC50)), rep("TOTXVI", times=length(totxvi.mtt.select.mir.bt$LC50))))
+
+all.mir.lm.bt <- t(apply(all.mir.bt, 1, function(x){summary(lm(log2(all.mir.pheno.bt)~all.mir.prot.bt+x))$coef}["x",3:4]))
+all.mir.lm.bt <- as.data.frame(all.mir.lm.bt, as.is=TRUE, stringsAsFactors=FALSE)
+
+all.mir.lm.bt$Name <- rownames(all.mir.lm.bt)
+
+all.mir.lm.bt <- all.mir.lm.bt[,3:1]
+colnames (all.mir.lm.bt) <- c("Name", "all.mir.lm.p.bt", "all.mir.lm.stat.bt")
+
+@ 
+
+
+
+<<mirlmall.b, cache=TRUE>>=
+totxv.mirdata.b.all <- totxv.mirdata.b
+totxv.mirdata.b.all <- as.data.frame (totxv.mirdata.b.all, as.is=TRUE, stringsAsFactors=FALSE)
+totxv.mirdata.b.all$Name <- rownames (totxv.mirdata.b.all)
+
+totxvi.mirdata.b.all <- totxvi.mirdata.b
+totxvi.mirdata.b.all <- as.data.frame (totxvi.mirdata.b.all, as.is=TRUE, stringsAsFactors=FALSE)
+totxvi.mirdata.b.all$Name <- rownames (totxvi.mirdata.b.all)
+
+all.mir.b <- merge(totxv.mirdata.b.all, totxvi.mirdata.b.all)
+rownames(all.mir.b) <- all.mir.b$Name
+all.mir.b$Name <- NULL
+
+all.mir.pheno.b <- c(totxv.mtt.select.mir.b$LC50, totxvi.mtt.select.mir.b$LC50)
+all.mir.prot.b <- as.factor(c(rep("TOTXV", times=length(totxv.mtt.select.mir.b$LC50)), rep("TOTXVI", times=length(totxvi.mtt.select.mir.b$LC50))))
+
+all.mir.lm.b <- t(apply(all.mir.b, 1, function(x){summary(lm(log2(all.mir.pheno.b)~all.mir.prot.b+x))$coef}["x",3:4]))
+all.mir.lm.b <- as.data.frame(all.mir.lm.b, as.is=TRUE, stringsAsFactors=FALSE)
+
+all.mir.lm.b$Name <- rownames(all.mir.lm.b)
+
+all.mir.lm.b <- all.mir.lm.b[,3:1]
+colnames (all.mir.lm.b) <- c("Name", "all.mir.lm.p.b", "all.mir.lm.stat.b")
+
+@ 
+
+
+
+<<mirlmall.t, cache=TRUE>>=
+totxv.mirdata.t.all <- totxv.mirdata.t
+totxv.mirdata.t.all <- as.data.frame (totxv.mirdata.t.all, as.is=TRUE, stringsAsFactors=FALSE)
+totxv.mirdata.t.all$Name <- rownames (totxv.mirdata.t.all)
+
+totxvi.mirdata.t.all <- totxvi.mirdata.t
+totxvi.mirdata.t.all <- as.data.frame (totxvi.mirdata.t.all, as.is=TRUE, stringsAsFactors=FALSE)
+totxvi.mirdata.t.all$Name <- rownames (totxvi.mirdata.t.all)
+
+all.mir.t <- merge(totxv.mirdata.t.all, totxvi.mirdata.t.all)
+rownames(all.mir.t) <- all.mir.t$Name
+all.mir.t$Name <- NULL
+
+all.mir.pheno.t <- c(totxv.mtt.select.mir.t$LC50, totxvi.mtt.select.mir.t$LC50)
+all.mir.prot.t <- as.factor(c(rep("TOTXV", times=length(totxv.mtt.select.mir.t$LC50)), rep("TOTXVI", times=length(totxvi.mtt.select.mir.t$LC50))))
+
+all.mir.lm.t <- t(apply(all.mir.t, 1, function(x){summary(lm(log2(all.mir.pheno.t)~all.mir.prot.t+x))$coef}["x",3:4]))
+all.mir.lm.t <- as.data.frame(all.mir.lm.t, as.is=TRUE, stringsAsFactors=FALSE)
+
+all.mir.lm.t$Name <- rownames(all.mir.lm.t)
+
+all.mir.lm.t <- all.mir.lm.t[,3:1]
+colnames (all.mir.lm.t) <- c("Name", "all.mir.lm.p.t", "all.mir.lm.stat.t")
+
+@ 
+
+
+<<mirlmall.merge, cache=TRUE>>=
+all.mir.lm <- merge (all.mir.lm.bt, all.mir.lm.b)
+all.mir.lm <- merge (all.mir.lm, all.mir.lm.t)
+
+write.table (all.mir.lm, file="lm_mir_lc50.tsv", row.names=FALSE, quote=FALSE, sep="\t")
+
+@ 
+
+
+
+
+
+<<mirmetanew, cache=TRUE>>=
+all.mir.result <- merge (totxv.mir.result, totxvi.mir.result)
+all.mir.result <- merge (all.mir.result, all.mir.lm)
+
+
+all.mir.result$meta.stat.bt <- apply (all.mir.result[,c("totxv.mir.lm.stat.bt", "totxvi.mir.lm.stat.bt")], 1, function (x){sum(x)/sqrt(length(x))})
+all.mir.result$meta.p.bt <- 2*(pnorm(abs(all.mir.result$meta.stat.bt),lower.tail=FALSE))
+
+all.mir.result$meta.stat.b <- apply (all.mir.result[,c("totxv.mir.lm.stat.b", "totxvi.mir.lm.stat.b")], 1, function (x){sum(x)/sqrt(length(x))})
+all.mir.result$meta.p.b <- 2*(pnorm(abs(all.mir.result$meta.stat.b),lower.tail=FALSE))
+
+#all.mir.result$meta.stat.t <- apply (all.mir.result[,c("totxv.mir.t.stat.t", "totxv.mir.w.stat.t", "totxvi.mir.t.stat.t", "totxvi.mir.w.stat.t")], 1, function (x){sum(x)/sqrt(length(x))})
+all.mir.result$meta.stat.t <- apply (all.mir.result[,c("totxv.mir.lm.stat.t", "totxvi.mir.lm.stat.t")], 1, function (x){sum(x)/sqrt(length(x))})
+all.mir.result$meta.p.t <- 2*(pnorm(abs(all.mir.result$meta.stat.t),lower.tail=FALSE))
+
+
+all.mir.result$p.bt <- all.mir.result$all.mir.lm.p.bt
+all.mir.result$stat.bt <- all.mir.result$all.mir.lm.stat.bt
+
+all.mir.result$p.b <- all.mir.result$all.mir.lm.p.b
+all.mir.result$stat.b <- all.mir.result$all.mir.lm.stat.b
+
+all.mir.result$p.t <- all.mir.result$all.mir.lm.p.t
+all.mir.result$stat.t <- all.mir.result$all.mir.lm.stat.t
+
+write.table(all.mir.result, file="mir_lc50.tsv", row.names=FALSE, quote=FALSE, sep="\t")
+@ 
+
+
+
+\end{document}

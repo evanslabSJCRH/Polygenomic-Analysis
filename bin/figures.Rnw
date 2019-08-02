@@ -1,0 +1,2626 @@
+
+\documentclass{article}
+\usepackage[nottoc,numbib]{tocbibind}
+\usepackage{Sweave}
+\usepackage{color}
+\usepackage{amsmath}
+\usepackage{mathtools}
+\usepackage{rotating}
+\usepackage{multirow}
+\usepackage{amscd}
+\usepackage[tableposition=top]{caption}
+\usepackage{ifthen}
+\usepackage[utf8]{inputenc}
+
+
+\renewcommand{\rmdefault}{phv} % Arial font
+\renewcommand{\sfdefault}{phv} % Arial font
+\usepackage[left=1in,top=1in,right=1in,bottom=1in]{geometry} %margins
+\usepackage{longtable}
+\setlength{\parindent}{0in}
+\usepackage{graphicx}
+\usepackage{pdflscape}
+\usepackage{lscape}
+
+
+\begin{document}
+
+\pagebreak[4]
+
+
+<<loadpackages>>=
+
+r.lib <- "drworkflow_Rlib"
+
+require (EvansData, lib.loc=r.lib)
+require (EvansAnalysis, lib.loc=r.lib)
+require (SJHMGEData, lib.loc=r.lib)
+require (SJHMSNPData, lib.loc=r.lib)
+
+require (gtools, lib.loc=r.lib)
+require (gdata, lib.loc=r.lib)
+require (bitops, lib.loc=r.lib)
+require (caTools, lib.loc=r.lib)
+require (gplots, lib.loc=r.lib)
+require (amap, lib.loc=r.lib)
+@
+
+
+<<sciNotationdef>>=
+
+sciNotation <- function(x=0, y=0, p="", mytext1="", mytext2="", digits=1, cex=1.2, type="twoline") {
+  exponent <- floor(log10(p))
+  base <- round(p / 10^exponent, digits)
+  hght <- strheight("Here", cex=cex)
+  p <- "p = "
+  base <- as.character(base)
+  exponent <- as.character(exponent)
+  spacing <- 1.5
+  if (type=="twoline"){
+    text(x, y - (hght * spacing * 1), labels=bquote(bold(.(mytext1))), cex=cex)
+    text(x, y - (hght * spacing * 2), labels=bquote(bold(.(mytext2))), cex=cex)
+    text(x, y - (hght * spacing * 3), labels=bquote(bold(.(p)*.(base)*" × 10"^.(exponent))), cex=cex)
+  }
+  if (type=="oneline"){
+    text (x, y, labels=bquote(bold(.(p)*.(base)*" × 10"^.(exponent))), cex=2)
+  }
+}
+
+@
+
+<<drugselect>>=
+
+wd <- getwd()
+wdsplit <- unlist (strsplit (wd, "/"))
+drug <- wdsplit[length(wdsplit)]
+
+@ 
+
+<<geprep>>=
+
+mtt.select <- mtt.prep(drug)
+source("drugcatadjust.R")
+
+
+
+source("drugcatadjust.R")
+
+ge.cutoff <- read.delim ("gecutoff.txt", header=FALSE)
+ge.cutoff <- unlist (ge.cutoff)
+names (ge.cutoff) <- NULL
+
+ge.lc50.result <- read.delim("ge_lc50.tsv", as.is=TRUE, stringsAsFactors=FALSE)
+ge.lc50.result <- subset(ge.lc50.result, ge.lc50.result$p.b < ge.cutoff)
+ge.lc50.result <- ge.lc50.result [order(ge.lc50.result$p.b),]
+
+mtt.select <- subset (mtt.select, mtt.select$LC50.GROUP %in% c(1,3))
+mtt.select <- subset (mtt.select, mtt.select$LIN == "B")
+rownames (mtt.select) <- mtt.select$MRN
+
+
+
+
+probes.int.b <- ge.lc50.result[,"Probe.Set.ID"]
+
+
+
+#if (!(drug %in% c("PRED", "LASP", "VCR", "6MP", "6TG"))){
+  all.ge.data.b <- cbind(t(scale(t(stjude.dxbm.hm.mas5.probe.log2[probes.int.b,]))), t(scale(t(stjude.dxbm.xvi.mas5.probe.log2[probes.int.b,]))))
+#}
+#TODO(spaugh): Add GE data for 6TG 6MP "New dutch"
+
+pt.int.b <- intersect(rownames(mtt.select), colnames(all.ge.data.b))
+
+mtt.select <- mtt.select[pt.int.b, ]
+
+all.ge.data.b <- all.ge.data.b[, pt.int.b]
+
+all.ge.hc2 <- hcluster(all.ge.data.b, method = "correlation", diag = FALSE, upper = FALSE, link = "ward", members = NULL, doubleprecision = FALSE)
+all.ge.hc2 <- as.dendrogram(all.ge.hc2)
+#all.ge.hc2<- reorder (all.ge.hc2, ge.lc50.result$p.b)
+#str(labels(all.ge.hc2))
+if(drug == "PRED"){
+all.ge.hc2 <- rev(all.ge.hc2)
+}
+
+xv.ge.data <- all.ge.data.b[,as.character(mtt.select[mtt.select$PROT == "TOTXV", "MRN"])]
+xv.ge.pt.hc <- hcluster(t(xv.ge.data), method = "correlation", diag = FALSE, upper = FALSE, link = "ward", members = NULL, doubleprecision = FALSE)
+xv.ge.clust.p <- fisher.test(table(cutree(xv.ge.pt.hc, k=2), mtt.select[mtt.select$PROT == "TOTXV", "LC50.GROUP"]))$p.value
+
+xv.ge.pt.hc <- as.dendrogram(xv.ge.pt.hc)
+xv.ge.pt.hc <- reorder (xv.ge.pt.hc, mtt.select[mtt.select$PROT == "TOTXV", "LC50"], agglo.FUN=sum)
+
+xvi.ge.data <- all.ge.data.b[,as.character(mtt.select[mtt.select$PROT == "TOTXVI", "MRN"])]
+xvi.ge.pt.hc <- hcluster(t(xvi.ge.data), method = "correlation", diag = FALSE, upper = FALSE, link = "ward", members = NULL, doubleprecision = FALSE)
+xvi.ge.clust.p <- fisher.test(table(cutree(xvi.ge.pt.hc, k=2), mtt.select[mtt.select$PROT == "TOTXVI", "LC50.GROUP"]))$p.value
+
+
+xvi.ge.pt.hc <- as.dendrogram(xvi.ge.pt.hc)
+xvi.ge.pt.hc <- reorder (xvi.ge.pt.hc, mtt.select[mtt.select$PROT == "TOTXVI", "LC50"], agglo.FUN=sum)
+xvi.ge.pt.hc <- merge(rev(xvi.ge.pt.hc[[1]]),xvi.ge.pt.hc[[2]])
+
+if(drug == "LASP"){
+xvi.ge.pt.hc <- rev(xvi.ge.pt.hc)}
+
+
+xv.ge.breaks <- 41
+xv.ge.extreme <- max(abs(xv.ge.data), na.rm = TRUE)
+xv.ge.breaks <- seq(-xv.ge.extreme, xv.ge.extreme, length=xv.ge.breaks)
+xv.min.breaks <- min (xv.ge.breaks)
+xv.max.breaks <- max (xv.ge.breaks)
+xv.ge.data[xv.ge.data < xv.min.breaks] <- xv.min.breaks
+xv.ge.data[xv.ge.data > xv.max.breaks] <- xv.max.breaks
+xv.ge.data <- xv.ge.data[order.dendrogram(all.ge.hc2), order.dendrogram(xv.ge.pt.hc)]
+xv.ge.col <- mtt.select[mtt.select$PROT == "TOTXV", "LC50.GROUP"]
+
+
+xvi.ge.breaks <- 41
+xvi.ge.extreme <- max(abs(xvi.ge.data), na.rm = TRUE)
+xvi.ge.breaks <- seq(-xvi.ge.extreme, xvi.ge.extreme, length=xvi.ge.breaks)
+xvi.min.breaks <- min (xvi.ge.breaks)
+xvi.max.breaks <- max (xvi.ge.breaks)
+xvi.ge.data[xvi.ge.data < xvi.min.breaks] <- xvi.min.breaks
+xvi.ge.data[xvi.ge.data > xvi.max.breaks] <- xvi.max.breaks
+xvi.ge.data <- xvi.ge.data[order.dendrogram(all.ge.hc2), order.dendrogram(xvi.ge.pt.hc)]
+xvi.ge.col <- mtt.select[mtt.select$PROT == "TOTXVI", "LC50.GROUP"]
+
+
+#TODO(spaugh): Add rm here to remove cruft
+
+@ 
+
+
+<<preptotxvmirdata>>=
+
+totxv.mir.mtt.select.b <- mtt.prep(drug)
+source("drugcatadjust.R")
+
+
+totxv.mir.mtt.select.b <- subset (totxv.mir.mtt.select.b, totxv.mir.mtt.select.b$LIN == "B")
+totxv.mir.mtt.select.b <- subset (totxv.mir.mtt.select.b, totxv.mir.mtt.select.b$LC50.GROUP %in% c(1,3))
+rownames(totxv.mir.mtt.select.b) <- totxv.mir.mtt.select.b$MRN
+
+totxv.mir.select.b <- intersect (colnames (mir.data.totxv.som), totxv.mir.mtt.select.b$MRN)
+
+mir.data.totxv.som <- t(scale(t(mir.data.totxv.som)))
+
+totxv.mirdata.b <- mir.data.totxv.som[,as.character(totxv.mir.select.b)]
+totxv.mir.mtt.select.b <- totxv.mir.mtt.select.b[as.character(totxv.mir.select.b),]
+
+mir.meta.result <- read.delim ("mir_lc50.tsv", as.is=TRUE, stringsAsFactors=FALSE)
+
+
+mir.anno <- read.csv ("miranno_new.csv", as.is=TRUE, stringsAsFactors=FALSE)
+
+
+mir.meta.result <- merge (mir.meta.result, mir.anno)
+mir.meta.result <- subset (mir.meta.result, mir.meta.result$Int == 1)
+
+
+mir.cutoff <- read.delim ("mircutoff.txt", header=FALSE)
+mir.cutoff <- unlist (mir.cutoff)
+names (mir.cutoff) <- NULL
+
+mir.probes.int.b <- mir.meta.result[mir.meta.result$p.b < mir.cutoff, "Name"]
+mirdata.heat.b <- totxv.mirdata.b
+
+mirdata.heat.b <- mirdata.heat.b[as.character(mir.probes.int.b),]
+
+totxv.mir.hc1 <- hcluster(mirdata.heat.b, method = "correlation", diag = FALSE, upper = FALSE, link = "ward", members = NULL, doubleprecision = FALSE)
+
+totxv.mir.hc2 <- hcluster(t(mirdata.heat.b), method = "correlation", diag = FALSE, upper = FALSE, link = "ward", members = NULL, doubleprecision = FALSE)
+xv.mir.clust.p <- fisher.test(table(cutree(totxv.mir.hc2, k=2), totxv.mir.mtt.select.b$LC50.GROUP))$p.value
+xv.mir.clust.p
+
+table(cutree(totxv.mir.hc2, k=2), totxv.mir.mtt.select.b$LC50)
+
+totxv.mir.hc1 <- as.dendrogram (totxv.mir.hc1)
+
+
+totxv.mir.hc2 <- reorder (as.dendrogram(totxv.mir.hc2), totxv.mir.mtt.select.b$LC50, agglo.FUN=mean)
+
+totxv.mir.col <- totxv.mir.mtt.select.b[totxv.mir.mtt.select.b$LC50.GROUP %in% c(1,3),"LC50.GROUP"]
+                                       
+
+mirdata.heat.b.breaks <- 41
+mirdata.heat.b.extreme <- max(abs(mirdata.heat.b), na.rm = TRUE)
+mirdata.heat.b.breaks <- seq(-mirdata.heat.b.extreme, mirdata.heat.b.extreme, length=mirdata.heat.b.breaks)
+mirdata.min.breaks <- min (mirdata.heat.b.breaks)
+mirdata.max.breaks <- max (mirdata.heat.b.breaks)
+mirdata.heat.b[mirdata.heat.b < mirdata.min.breaks] <- mirdata.min.breaks
+mirdata.heat.b[mirdata.heat.b > mirdata.max.breaks] <- mirdata.max.breaks
+totxv.mirdata.heat.b <- mirdata.heat.b[order.dendrogram(totxv.mir.hc1), order.dendrogram(totxv.mir.hc2)]
+totxv.mirdata.heat.b.breaks <- mirdata.heat.b.breaks
+
+@
+
+<<preptotxvimirdata>>=
+
+totxvi.mir.mtt.select.b <- mtt.prep(drug)
+source("drugcatadjust.R")
+
+totxvi.mir.mtt.select.b <- subset (totxvi.mir.mtt.select.b, totxvi.mir.mtt.select.b$LIN == "B")
+totxvi.mir.mtt.select.b <- subset (totxvi.mir.mtt.select.b, totxvi.mir.mtt.select.b$LC50.GROUP %in% c(1,3))
+rownames(totxvi.mir.mtt.select.b) <- totxvi.mir.mtt.select.b$MRN
+
+totxvi.mir.select.b <- intersect (colnames (mir.data.totxvi.som), totxvi.mir.mtt.select.b$MRN)
+
+mir.data.totxvi.som <- t(scale(t(mir.data.totxvi.som)))
+
+totxvi.mirdata.b <- mir.data.totxvi.som[,as.character(totxvi.mir.select.b)]
+totxvi.mir.mtt.select.b <- totxvi.mir.mtt.select.b[as.character(totxvi.mir.select.b),]
+
+mir.meta.result <- read.delim ("mir_lc50.tsv", as.is=TRUE, stringsAsFactors=FALSE)
+
+mir.anno <- read.csv ("miranno_new.csv", as.is=TRUE, stringsAsFactors=FALSE)
+
+
+mir.meta.result <- merge (mir.meta.result, mir.anno)
+mir.meta.result <- subset (mir.meta.result, mir.meta.result$Int == 1)
+
+
+mir.probes.int.b <- mir.meta.result[mir.meta.result$p.b < mir.cutoff, "Name"]
+
+mirdata.heat.b <- totxvi.mirdata.b
+
+mirdata.heat.b <- mirdata.heat.b[as.character(mir.probes.int.b),]
+
+totxvi.mir.hc1 <- hcluster(mirdata.heat.b, method = "correlation", diag = FALSE, upper = FALSE, link = "ward", members = NULL, doubleprecision = FALSE)
+
+totxvi.mir.hc2 <- hcluster(t(mirdata.heat.b), method = "correlation", diag = FALSE, upper = FALSE, link = "ward", members = NULL, doubleprecision = FALSE)
+xvi.mir.clust.p <- fisher.test(table(cutree(totxvi.mir.hc2, k=2), totxvi.mir.mtt.select.b$LC50.GROUP))$p.value
+
+totxvi.mir.hc1 <- as.dendrogram (totxvi.mir.hc1)
+
+
+totxvi.mir.hc2 <- reorder (as.dendrogram(totxvi.mir.hc2), totxvi.mir.mtt.select.b$LC50, agglo.FUN=mean)
+
+totxvi.mir.col <- totxvi.mir.mtt.select.b[totxvi.mir.mtt.select.b$LC50.GROUP %in% c(1,3),"LC50.GROUP"]
+
+mirdata.heat.b.breaks <- 41
+mirdata.heat.b.extreme <- max(abs(mirdata.heat.b), na.rm = TRUE)
+mirdata.heat.b.breaks <- seq(-mirdata.heat.b.extreme, mirdata.heat.b.extreme, length=mirdata.heat.b.breaks)
+mirdata.min.breaks <- min (mirdata.heat.b.breaks)
+mirdata.max.breaks <- max (mirdata.heat.b.breaks)
+mirdata.heat.b[mirdata.heat.b < mirdata.min.breaks] <- mirdata.min.breaks
+mirdata.heat.b[mirdata.heat.b > mirdata.max.breaks] <- mirdata.max.breaks
+totxvi.mirdata.heat.b <- mirdata.heat.b[order.dendrogram(totxv.mir.hc1), order.dendrogram(totxvi.mir.hc2)]
+totxvi.mirdata.heat.b.breaks <- mirdata.heat.b.breaks
+
+@
+
+
+<<mirgeconnect>>=
+
+
+rownames (totxvi.mirdata.heat.b)
+
+mir.connect <- read.delim ("ge_mir_meta.tsv", as.is=TRUE, stringsAsFactors=FALSE)
+
+mir.connect <- subset (mir.connect, mir.connect$Probe.Set.ID %in% rownames (xv.ge.data))
+head(mir.connect)
+#TODO(spaugh):Watch column names, thresholds here
+mir.connect <- subset (mir.connect, mir.connect$all.lm.p < 0.01) 
+mir.connect <- subset (mir.connect, mir.connect$all.lm.stat < 0)
+
+mir.connect$mirprobe <- as.character(mir.connect$mirprobe)
+
+mir.connect <- subset (mir.connect, mir.connect$mirprobe %in% rownames(totxvi.mirdata.heat.b))                                         
+mirorder <- apply (mir.connect, 1, function (x){which(x["mirprobe"] == rownames(totxvi.mirdata.heat.b))})
+
+
+mir.connect$mirorder <- unlist (mirorder)
+mir.connect$georder <- apply (mir.connect, 1, function(x){which(x["Probe.Set.ID"] == rownames(xv.ge.data))})
+head(HG.U133A.na31.annot.long)
+
+mir.connect <- merge (mir.connect, HG.U133A.na31.annot.long)
+
+mir.connect <- mir.connect[,-28]
+mir.anno <- read.csv("miranno_new.csv", as.is=TRUE, stringsAsFactors=FALSE)
+
+
+colnames(mir.anno)[5] <- "mirprobe"
+
+mir.connect <- merge (mir.connect, mir.anno)
+mir.connect <- mir.connect[,c(1:28,32,39)]
+dim(mir.connect)
+
+colnames (mir.connect) <- gsub ("hsa", "new_name", colnames (mir.connect))
+colnames (mir.connect) <- gsub ("Gene.Symbol", "gene_symbol", colnames (mir.connect))
+
+
+#mir.pred.s.c <- read.delim ("human_predictions_S_C_aug2010.txt", as.is=TRUE, stringsAsFactors=FALSE)
+#mir.pred.s.0 <- read.delim ("human_predictions_S_0_aug2010.txt", as.is=TRUE, stringsAsFactors=FALSE)
+
+#mir.pred <- rbind (mir.pred.s.c, mir.pred.s.0)
+#mir.pred <- read.csv("mir_all_small.csv", header = TRUE, stringsAsFactors = FALSE)
+mir.pred <- read.table("drworkflow_data/mir_trunc_small_unique.tsv", header = TRUE, stringsAsFactors = FALSE)
+#colnames(mir.pred) <- gsub("Probe", "mirprobe", colnames(mir.pred))
+#colnames(mir.pred) <- gsub("new_name", "", colnames(mir.pred))
+head(mir.pred)
+mir.pred$family <- NULL
+mir.connect$new_name <- gsub("miR","mir",mir.connect$new_name)
+mir.connect.family <- mir.connect
+mir.connect.family$family <- rep("NA", times = nrow(mir.connect.family))
+mir.connect.family$family <- mir.connect.family$new_name
+mir.connect.family$family <- gsub("-3p","", mir.connect.family$family)
+mir.connect.family$family <- gsub("-5p","", mir.connect.family$family)
+mir.connect.family$new_name_old <- mir.connect.family$new_name
+mir.connect.family$new_name <- mir.connect.family$family
+#mir.connect.family$family <- NULL
+#mir.pred <- mir.pred[,2:(ncol(mir.pred)-1)]
+#nrow(unique(mir.connect[,c("new_name","gene_symbol",)])) 
+mir.connect.mir <- merge (mir.connect, mir.pred,by = c("new_name","Probe.Set.ID","gene_symbol"))
+mir.connect.mir$family <- rep("NA", times = nrow(mir.connect.mir))
+mir.connect.mir$family <- mir.connect.mir$new_name
+mir.connect.mir$family <- gsub("-3p","", mir.connect.mir$family)
+mir.connect.mir$family <- gsub("-5p","", mir.connect.mir$family)
+mir.connect.mir$new_name_old <-rep("NA", times = nrow(mir.connect.mir))
+mir.connect.family <- merge(mir.connect.family, mir.pred, by =c("new_name","Probe.Set.ID","gene_symbol"))
+mir.pred.alt <- mir.pred
+colnames(mir.pred.alt)[2] <- "new_name"
+colnames(mir.pred.alt)[3] <- "mirna_name"
+
+mir.connect.mir.old <- merge (mir.connect, mir.pred.alt,by = c("new_name","Probe.Set.ID","gene_symbol"))
+mir.connect.mir.old$family <- rep("NA", times = nrow(mir.connect.mir.old))
+mir.connect.mir.old$family <- mir.connect.mir.old$new_name
+mir.connect.mir.old$family <- gsub("-3p","", mir.connect.mir.old$family)
+mir.connect.mir.old$family <- gsub("-5p","", mir.connect.mir.old$family)
+mir.connect.mir.old$new_name_old <-rep("NA", times = nrow(mir.connect.mir.old))
+
+#mir.connect <- merge (mir.connect, mir.pred)
+
+head(mir.connect.mir)
+
+mir.connect.mir <- subset(mir.connect.mir,!duplicated(mir.connect.mir[,c("gene_symbol","mirprobe","Probe.Set.ID")],fromLast = TRUE))
+mir.connect.mir.old <- subset(mir.connect.mir.old,!duplicated(mir.connect.mir[,c("gene_symbol","mirprobe","Probe.Set.ID")],fromLast = TRUE))
+mir.connect.family <- subset(mir.connect.family,!duplicated(mir.connect.family[,c("gene_symbol","mirprobe","Probe.Set.ID")],fromLast = TRUE))
+dim(mir.connect.family)
+dim(mir.connect.mir)
+colnames(mir.connect.mir)
+colnames(mir.connect.family)
+#mir.connect <- merge(mir.connect.mir,mir.connect.family, by.x =c("new_name","Probe.Set.ID", "gene_symbol"),by.y =c("new_name_old","Probe.Set.ID", "gene_symbol"))
+mir.connect <- rbind(mir.connect.mir,mir.connect.family)
+
+mir.connect <- rbind(mir.connect,mir.connect.mir.old)
+head(mir.connect)
+dim(mir.connect)
+mir.connect<- subset(mir.connect,!duplicated(mir.connect[,c("gene_symbol","mirprobe","Probe.Set.ID")],fromLast = TRUE))
+#mir.connect$best <- apply(mir.connect,1,function(x){which(mir.connect[,c("gene_symbol","mirprobe")])
+#mir.connect <-mir.connect[,c(1:30,32:34,36)]
+mir.connect.agg <- do.call(rbind,lapply(split(mir.connect,mir.connect$mirprobe),function(chunk){do.call(rbind,lapply(split(chunk,chunk$gene_symbol),function(x){x <- subset(x, x$p.b ==  min(x$p.b))}))}))
+#mir.connect$best <- apply(mir.connect,1,function(x){ifelse(mir.connect[which(duplicated(mir.connect[,c("gene_symbol","mirprobe")])),] <-
+#mir.connect <-mir.connect[,c(1:30,32:34,36)]
+mir.connect <- mir.connect.agg
+rownames(mir.connect) <- NULL
+write.csv (mir.connect, file="TableS06.csv", row.names = FALSE)
+write.csv (mir.connect.mir, file="TableS06.mir.csv")
+write.csv (mir.connect.mir.old, file="TableS06.mir.old.csv")
+write.csv (mir.connect.family, file="TableS06.family.csv")
+
+@ 
+
+
+
+<<loadmethgeconnectdata>>=
+methge <- read.delim("ge_meth_meta_sub.tsv", as.is=TRUE, stringsAsFactors=FALSE, sep="\t")
+#fixed this upstream, need to change delimiter here soon
+methge <- subset (methge, methge$meta.p.b < 0.05 | methge$all.lm.p < 0.05)
+#methge <- subset (methge, methge$all.lm.p < 0.05)
+methge <- subset (methge, methge$Probe.Set.ID %in% rownames(xv.ge.data))
+
+
+colnames (methge)
+
+head (methge)
+
+colnames (methge)[2] <- c("IlmnID")
+
+#ge.info <- HG.U133A.na31.annot.long
+ge.info <- read.delim <- read.delim("U133_gene_pos.txt", as.is = TRUE , stringsAsFactors = FALSE)
+ge.info <- ge.info[,c("Probe.Set.ID","Start","End", "Chr","Gene.Symbol")]
+ge.info <- subset(ge.info, !duplicated(ge.info$Probe.Set.ID))
+meth.info <- InfiniumMethAnnot[,c("IlmnID", "hg19Chr", "hg19Pos")]
+
+methge <- merge (methge, ge.info)
+methge <- merge (methge, meth.info)
+
+methge$samechr <- ifelse (methge$Chr == methge$hg19Chr, TRUE, FALSE)
+
+methge <- subset (methge, methge$samechr)
+
+methge$Start <- as.numeric(methge$Start)
+methge$End <- as.numeric(methge$End)
+methge$hg19Pos <- as.numeric (methge$hg19Pos)
+
+methge$distance <- pmin(abs(methge$hg19Pos - methge$Start), abs(methge$hg19Pos - methge$End))
+
+methge <- subset (methge, methge$distance < 100000)
+
+methge <- subset (methge, methge$meta.stat.b < 0)
+
+meth.connect.probes <- methge$IlmnID
+
+@ 
+
+<<preptotxvmethdata>>=
+
+mtt.select <- mtt.prep(drug)
+source("drugcatadjust.R")
+
+rownames(mtt.select) <- mtt.select$MRN
+mtt.select.b <- subset (mtt.select, mtt.select$LIN == "B")
+mtt.select.b <- subset (mtt.select.b, mtt.select.b$LC50.GROUP %in% c(1,3))
+
+
+meth.result <- read.delim("meth_lc50.tsv", as.is=TRUE, stringsAsFactors=FALSE)
+dim (meth.result)
+
+head (meth.result)
+
+meth.alpha <- read.delim ("methcutoff.txt", header=FALSE)
+meth.alpha <- unlist (meth.alpha)
+names (meth.alpha) <- NULL
+
+meth.result <- subset (meth.result, meth.result$p.b < meth.alpha)
+
+meth.result <- meth.result[order(meth.result$p.b),]
+
+meth.prob.int <- c(meth.result$IlmnID, meth.connect.probes)
+#meth.prob.int <- c(meth.result$IlmnID)
+
+meth.pt.int.b <- intersect (colnames (meth.data.totxv.som), mtt.select.b$MRN)
+
+totxv.meth.phenotype.b<- mtt.select.b[as.character(meth.pt.int.b),"LC50.GROUP"]
+
+totxv.meth.data.b <- meth.data.totxv.som[meth.prob.int,as.character(meth.pt.int.b)]
+
+
+totxv.meth.hc1 <- as.dendrogram(hcluster(totxv.meth.data.b, method = "correlation", diag = FALSE, upper = FALSE, link = "ward", members = NULL, doubleprecision = FALSE))
+totxv.meth.hc2 <- hcluster(t(totxv.meth.data.b), method = "correlation", diag = FALSE, upper = FALSE, link = "ward", members = NULL, doubleprecision = FALSE)
+totxv.meth.clust.p <- fisher.test(table(cutree(totxv.meth.hc2, k=2), mtt.select.b[as.character(meth.pt.int.b),"LC50.GROUP"]))$p.value
+totxv.meth.clust.p
+
+
+
+totxv.meth.hc2 <- reorder(as.dendrogram(totxv.meth.hc2), mtt.select.b[as.character(meth.pt.int.b),"LC50"], agglo.FUN=mean)
+totxv.b.meth.data.heat <- totxv.meth.data.b[order.dendrogram(totxv.meth.hc1), order.dendrogram(totxv.meth.hc2)]
+@ 
+
+<<preptotxvimethdata>>=
+mtt.select <- mtt.prep(drug)
+source("drugcatadjust.R")
+
+rownames(mtt.select) <- mtt.select$MRN
+mtt.select.b <- subset (mtt.select, mtt.select$LIN == "B")
+mtt.select.b <- subset (mtt.select.b, mtt.select.b$LC50.GROUP %in% c(1,3))
+
+
+
+meth.pt.int.b <- intersect (colnames (meth.data.totxvi.som), mtt.select.b$MRN)
+
+totxvi.meth.phenotype.b<- mtt.select.b[as.character(meth.pt.int.b),"LC50.GROUP"]
+
+totxvi.meth.data.b <- meth.data.totxvi.som[meth.prob.int,as.character(meth.pt.int.b)]
+
+
+totxvi.meth.hc1 <- as.dendrogram(hcluster(totxvi.meth.data.b, method = "correlation", diag = FALSE, upper = FALSE, link = "ward", members = NULL, doubleprecision = FALSE))
+totxvi.meth.hc2 <- hcluster(t(totxvi.meth.data.b), method = "correlation", diag = FALSE, upper = FALSE, link = "ward", members = NULL, doubleprecision = FALSE)
+totxvi.meth.clust.p <- fisher.test(table(cutree(totxvi.meth.hc2, k=2), mtt.select.b[as.character(meth.pt.int.b),"LC50.GROUP"]))$p.value
+totxvi.meth.clust.p
+
+totxvi.meth.hc2 <- reorder(as.dendrogram(totxvi.meth.hc2), mtt.select.b[as.character(meth.pt.int.b),"LC50"], agglo.FUN=mean)
+totxvi.b.meth.data.heat <- totxvi.meth.data.b[order.dendrogram(totxv.meth.hc1), order.dendrogram(totxvi.meth.hc2)]
+@ 
+
+
+<<methge>>=
+
+methge <- subset (methge, methge$IlmnID %in% rownames(totxv.b.meth.data.heat))
+methge$methorder <- apply (methge, 1, function (x){which(x["IlmnID"] == rownames(totxv.b.meth.data.heat))})
+methge$georder <- apply (methge, 1, function(x){which(x["Probe.Set.ID"] == rownames(xv.ge.data))})
+
+write.csv (methge, file="TableS07.csv")
+
+@ 
+
+
+<<impobjects>>=
+imp.objects <- c("drug", "dutch.ge.pt.hc", "xv.ge.pt.hc", "xvi.ge.pt.hc", "dutch.ge.col", "xv.ge.col", "xvi.ge.col", "dutch.ge.data", 
+                 "dutch.ge.breaks", "xv.ge.data", "xv.ge.breaks", "xvi.ge.data", "xvi.ge.breaks", "all.ge.hc2", "totxv.mirdata.heat.b",
+                 "totxv.mirdata.heat.b.breaks", "totxvi.mirdata.heat.b", "totxvi.mirdata.heat.b.breaks", "totxv.mir.hc1", "totxv.mir.hc2",
+                 "totxv.mir.col", "totxvi.mir.hc1", "totxvi.mir.hc2", "totxvi.mir.col", "totxv.meth.hc2", "totxvi.meth.hc2", "totxv.meth.phenotype.b",
+                 "totxvi.meth.phenotype.b", "totxv.b.meth.data.heat", "totxvi.b.meth.data.heat", "totxv.meth.hc1", "totxvi.meth.hc1", 
+                 "methge", "mir.connect", "sciNotation", "dutch.ge.clust.p", "xv.ge.clust.p", "xvi.ge.clust.p", "xv.mir.clust.p", "xvi.mir.clust.p",
+                 "totxv.meth.clust.p", "totxvi.meth.clust.p")
+
+rm (list=setdiff(ls(), imp.objects))
+gc()
+
+@ 
+
+<<snpresults>>=
+
+snp.result <- read.delim("snp_lc50.tsv", as.is=TRUE, stringsAsFactors=FALSE, header=TRUE)
+snp.result <- snp.result[order (snp.result$p.b),]
+snp.result <- snp.result[!is.na(snp.result$p.b),]
+snp.result$xv.01 <- apply (snp.result[,c("totxv.fisher.01.b", "totxv.fisher.11.b", "totxv.fisher.21.b")], 1, sum)
+
+snp.result$xv.03 <- apply (snp.result[,c("totxv.fisher.03.b", "totxv.fisher.13.b", "totxv.fisher.23.b")], 1, sum)
+
+snp.result$xvi.01 <- apply (snp.result[,c("totxvi.fisher.01.b", "totxvi.fisher.11.b", "totxvi.fisher.21.b")], 1, sum)
+
+snp.result$xvi.03 <- apply (snp.result[,c("totxvi.fisher.03.b", "totxvi.fisher.13.b", "totxvi.fisher.23.b")], 1, sum)
+
+snp.result$min.count <- apply (snp.result[,c("xv.01", "xv.03", "xvi.01", "xvi.03")], 1, min)
+
+snp.result <- snp.result[snp.result$min.count > 0,]
+
+head (snp.result)
+
+
+snp.alpha <- read.delim ("snpcutoff.txt", header=FALSE)
+snp.alpha <- unlist (snp.alpha)
+names (snp.alpha) <- NULL
+
+
+snp.result <- subset (snp.result, snp.result[,"p.b"] < snp.alpha)
+
+@ 
+
+<<prepsnpconnect>>=
+snp.ge.result <- read.delim ("ge_snp_meta_sub.tsv", as.is=TRUE, stringsAsFactors=FALSE, header=FALSE)
+
+snp.ge.alpha <- 1E-3
+snp.ge.alpha <- unlist (snp.ge.alpha)
+names (snp.ge.alpha) <- NULL
+
+snp.ge.result <- subset(snp.ge.result, snp.ge.result[,ncol(snp.ge.result)-3] < snp.ge.alpha)
+
+head (snp.ge.result)
+dim (snp.ge.result)
+
+#snp.connect.probes <- snp.ge.result[,1]
+
+snp.ge.result <- subset (snp.ge.result, snp.ge.result$V3 %in% rownames (xv.ge.data))
+@ 
+
+
+<<prepxvsnp>>=
+data ("20111216totxvsnpdatasom")
+
+head (snp.data.totxv.som)
+
+#snp.probes.int <- unique(c(snp.result[,1], snp.connect.probes))
+snp.probes.int <- unique(c(snp.result[,1]))
+
+totxv.snp.data <- snp.data.totxv.som[snp.probes.int,]
+
+dim (totxv.snp.data)
+
+head (totxv.snp.data)
+
+mtt.select <- mtt.prep(drug)
+source("drugcatadjust.R")
+
+rownames(mtt.select) <- mtt.select$MRN
+mtt.select.b <- subset (mtt.select, mtt.select$LIN == "B")
+mtt.select.b <- subset (mtt.select.b, mtt.select.b$LC50.GROUP %in% c(1,3))
+
+snp.pt.int <- intersect (mtt.select.b$MRN, colnames (totxv.snp.data))
+
+totxv.snp.data <- totxv.snp.data[,as.character(snp.pt.int)]
+mtt.select.b <- mtt.select.b[mtt.select.b$MRN %in% snp.pt.int,]
+mtt.select.b <- mtt.select.b[as.character(snp.pt.int),]
+
+totxv.snp.data[is.na(totxv.snp.data)] <- NA
+totxv.snp.data[totxv.snp.data == "NN"] <- NA
+totxv.snp.data[totxv.snp.data == "NC"] <- NA
+totxv.snp.data[totxv.snp.data == "AA"] <- 0
+totxv.snp.data[totxv.snp.data == "AB"] <- 1
+totxv.snp.data[totxv.snp.data == "BB"] <- 2
+
+dim (totxv.snp.data)
+head (totxv.snp.data)
+
+totxv.snp.data <- as.data.frame(totxv.snp.data, as.is=TRUE, stringsAsFactors=FALSE)
+dim (totxv.snp.data)
+head (totxv.snp.data)
+
+
+for (i in 1:ncol(totxv.snp.data)){
+totxv.snp.data[,i] <- as.numeric(totxv.snp.data[,i])
+}
+
+na.num <- apply (totxv.snp.data, 1, function(x){sum(is.na(x))})
+
+totxv.snp.data <- as.matrix (totxv.snp.data)
+
+totxv.snp.hc1 <- hcluster (totxv.snp.data, method = "bin", diag = FALSE, upper = FALSE, link = "ward", members = NULL, doubleprecision = FALSE)
+
+totxv.snp.hc2 <- hcluster (t(totxv.snp.data), method = "bin", diag = FALSE, upper = FALSE, link = "ward", members = NULL, doubleprecision = FALSE)
+
+totxv.snp.clust.p <- fisher.test(table(cutree(totxv.snp.hc2, k=2), mtt.select.b$LC50.GROUP))$p.value
+totxv.snp.clust.p
+
+totxv.snp.hc2 <- reorder(as.dendrogram(totxv.snp.hc2), mtt.select.b[,"LC50"], agglo.FUN=mean)
+
+
+totxv.snp.hc1 <- as.dendrogram(totxv.snp.hc1)
+
+totxv.snp.data <- totxv.snp.data[order.dendrogram(totxv.snp.hc1), order.dendrogram(totxv.snp.hc2)]
+totxv.snp.phenotype.b <- mtt.select.b$LC50.GROUP
+
+@ 
+
+<<prepxvisnp>>=
+data ("20111216totxvisnpdatasom")
+
+head (snp.data.totxvi.som)
+
+totxvi.snp.data <- snp.data.totxvi.som[snp.probes.int,]
+
+dim (totxvi.snp.data)
+
+head (totxvi.snp.data)
+
+mtt.select <- mtt.prep(drug)
+source("drugcatadjust.R")
+
+rownames(mtt.select) <- mtt.select$MRN
+mtt.select.b <- subset (mtt.select, mtt.select$LIN == "B")
+mtt.select.b <- subset (mtt.select.b, mtt.select.b$LC50.GROUP %in% c(1,3))
+
+snp.pt.int <- intersect (mtt.select.b$MRN, colnames (totxvi.snp.data))
+
+totxvi.snp.data <- totxvi.snp.data[,as.character(snp.pt.int)]
+mtt.select.b <- mtt.select.b[mtt.select.b$MRN %in% snp.pt.int,]
+mtt.select.b <- mtt.select.b[as.character(snp.pt.int),]
+
+dim (totxvi.snp.data)
+head (totxvi.snp.data)
+
+totxvi.snp.data[is.na(totxvi.snp.data)] <- NA
+totxvi.snp.data[totxvi.snp.data == "NN"] <- NA
+totxvi.snp.data[totxvi.snp.data == "NC"] <- NA
+totxvi.snp.data[totxvi.snp.data == "AA"] <- 0
+totxvi.snp.data[totxvi.snp.data == "AB"] <- 1
+totxvi.snp.data[totxvi.snp.data == "BB"] <- 2
+
+dim (totxvi.snp.data)
+head (totxvi.snp.data)
+
+totxvi.snp.data <- as.data.frame(totxvi.snp.data, as.is=TRUE, stringsAsFactors=FALSE)
+dim (totxvi.snp.data)
+head (totxvi.snp.data)
+
+
+for (i in 1:ncol(totxvi.snp.data)){
+  totxvi.snp.data[,i] <- as.numeric(totxvi.snp.data[,i])
+}
+
+na.num <- apply (totxvi.snp.data, 1, function(x){sum(is.na(x))})
+
+totxvi.snp.data <- as.matrix (totxvi.snp.data)
+
+totxvi.snp.hc1 <- hcluster (totxvi.snp.data, method = "bin", diag = FALSE, upper = FALSE, link = "ward", members = NULL, doubleprecision = FALSE)
+
+totxvi.snp.hc2 <- hcluster (t(totxvi.snp.data), method = "bin", diag = FALSE, upper = FALSE, link = "ward", members = NULL, doubleprecision = FALSE)
+
+totxvi.snp.clust.p <- fisher.test(table(cutree(totxvi.snp.hc2, k=2), mtt.select.b$LC50.GROUP))$p.value
+totxvi.snp.clust.p
+
+totxvi.snp.hc2 <- reorder(as.dendrogram(totxvi.snp.hc2), mtt.select.b[,"LC50"], agglo.FUN=mean)
+
+
+totxvi.snp.hc1 <- as.dendrogram(totxvi.snp.hc1)
+
+totxvi.snp.data <- totxvi.snp.data[order.dendrogram(totxv.snp.hc1), order.dendrogram(totxvi.snp.hc2)]
+totxvi.snp.phenotype.b <- mtt.select.b$LC50.GROUP
+
+@ 
+
+<<prepsnpconnectnums>>=
+snp.ge.result <- subset (snp.ge.result, snp.ge.result$V2 %in% rownames (totxv.snp.data))
+snp.ge.result <- snp.ge.result[,c("V24","V25","V33","V34","V35","V36","V37")]
+dim(snp.ge.result)
+colnames(snp.ge.result) <- c("Probe.Set.ID", "Gene.Probe.ID","all.lm.stat.b","all.lm.p.b","cmh.meta","meta.stat.b","meta.p.b")
+snp.ge.result$snporder <- apply (snp.ge.result, 1, function(x){which(x[1] == rownames(totxv.snp.data))}) 
+snp.ge.result$georder <- apply (snp.ge.result, 1, function(x){which(x[2] == rownames(xv.ge.data))})
+snp.anno <- read.csv("/rgs01/project_space/evansgrp/dr_genomics/common/drworkflow_data/combined_gene_snps_201601.csv", header =TRUE, stringsAsFactors =FALSE)
+
+snp.anno.alt <- read.delim("/rgs01/project_space/evansgrp/dr_genomics/common/drworkflow_data/snp6.trim.na34.anns.txt", header = TRUE, stringsAsFactors = FALSE)
+
+colnames(snp.anno.alt)
+head(snp.anno.alt)
+dim(snp.anno.alt)
+#tail(snp.anno.two.trim)
+ge.anno <- as.data.frame(HG.U133_Plus_2.na31.annot.long, header = TRUE, stringsAsFactors = FALSE)
+head(ge.anno)
+head(snp.ge.result)
+snp.ge.indx <- match(snp.ge.result$Probe.Set.ID,snp.anno.alt$Probe.Set.ID)
+snp.ge.indx <- snp.ge.indx[!is.na(snp.ge.indx)]
+ge.anno.snp <- snp.anno.alt[snp.ge.indx,]
+head(ge.anno.snp)
+dim(ge.anno.snp)
+ge.snp.indx <- match(snp.ge.result$Gene.Probe.ID, ge.anno$Probe.Set.ID)
+ge.snp.indx <- ge.snp.indx[!is.na(ge.snp.indx)]
+snp.anno.ge <- ge.anno[ge.snp.indx,]
+head(snp.anno.ge)
+dim(snp.anno.ge)
+
+snp.ge.result$pos <- unlist(as.numeric(ge.anno.snp$Pos))
+snp.ge.result$ge.start <- unlist(as.numeric(snp.anno.ge$Start))
+snp.ge.result$ge.end <- unlist(as.numeric(snp.anno.ge$End))
+snp.ge.result$snpchr <- as.character(unlist(ge.anno.snp$Chrom))
+snp.ge.result$gechr <- as.character(unlist(snp.anno.ge$Chr))
+snp.ge.result$ge.gene <- unlist(snp.anno.ge$Gene.Symbol)
+
+snp.ge.result$samechr <- apply (snp.ge.result, 1, function (x){ifelse((x["snpchr"] == x["gechr"])== TRUE, "TRUE","FALSE")})
+#nge.connect.sig$cistrans <- apply (snp.ge.result, 1, function (x){ifelse((x["cnchr"] == x["gechr"])== "TRUE", "CIS","TRANS")})
+snp.ge.result$distance <-  pmin(abs(snp.ge.result$pos- snp.ge.result$ge.start),abs(snp.ge.result$pos - snp.ge.result$ge.start), abs(snp.ge.result$pos - snp.ge.result$ge.end),abs(snp.ge.result$pos - snp.ge.result$ge.end))
+#(snp.ge.result$samechr == "TRUE" & snp.ge.result$distance <= 2000000)=="TRUE"
+#snp.ge.result$cistrans <- apply (snp.ge.result, 1, function (x){ifelse((x["samechr"] == "TRUE"), "CIS","TRANS")})
+for (i in 1:nrow(snp.ge.result)){
+  if (snp.ge.result$samechr[i] == "TRUE" & snp.ge.result$distance[i] <= 2000000){
+    snp.ge.result$cistrans[i] <- "CIS"
+  }else{
+snp.ge.result$cistrans[i]<- "TRANS"
+}
+}
+head(snp.anno)
+write.csv (snp.ge.result, file="TableS08.csv")
+
+
+@
+
+<<impobjects2>>=
+imp.objects <- c("drug", "dutch.ge.pt.hc", "xv.ge.pt.hc", "xvi.ge.pt.hc", "dutch.ge.col", "xv.ge.col", "xvi.ge.col", "dutch.ge.data", 
+                 "dutch.ge.breaks", "xv.ge.data", "xv.ge.breaks", "xvi.ge.data", "xvi.ge.breaks", "all.ge.hc2", "totxv.mirdata.heat.b",
+                 "totxv.mirdata.heat.b.breaks", "totxvi.mirdata.heat.b", "totxvi.mirdata.heat.b.breaks", "totxv.mir.hc1", "totxv.mir.hc2",
+                 "totxv.mir.col", "totxvi.mir.hc1", "totxvi.mir.hc2", "totxvi.mir.col", "totxv.meth.hc2", "totxvi.meth.hc2", "totxv.meth.phenotype.b",
+                 "totxvi.meth.phenotype.b", "totxv.b.meth.data.heat", "totxvi.b.meth.data.heat", "totxv.meth.hc1", "totxvi.meth.hc1", 
+                 "methge", "mir.connect", "sciNotation", "dutch.ge.clust.p", "xv.ge.clust.p", "xvi.ge.clust.p", "xv.mir.clust.p", "xvi.mir.clust.p",
+                 "totxv.meth.clust.p", "totxvi.meth.clust.p", "snp.ge.result", "totxvi.snp.hc1", "totxvi.snp.hc2", "totxv.snp.hc1", 
+                 "totxv.snp.hc2", "totxv.snp.data", "totxvi.snp.data", "totxvi.snp.phenotype.b", "totxv.snp.phenotype.b", "totxvi.snp.clust.p",
+                 "totxv.snp.clust.p")
+
+rm (list=setdiff(ls(), imp.objects))
+gc()
+
+@ 
+
+
+<<totxvcnprep>>=
+
+save.image("cntest.RData")
+cn.result.stat <- read.delim ("cn_lc50.tsv", as.is=TRUE, header=TRUE, stringsAsFactors=FALSE)
+cn.result.stat <- cn.result.stat[order(cn.result.stat$p.b),] 
+cn.result.stat <- cn.result.stat[1:1000,]
+
+#load ("all.CNState.RData")
+#load ("all.CNState.smooth.RData")
+#load ("../../../pgx/data/patient/snpchip/cnv/cn.data.som.seg.biostat.20160707.RData")
+  
+load ("cn.data.som.seg.biostat.201607a.RData")
+colnames(cn.data.som) <- gsub(".somatic","",colnames(cn.data.som))
+#load ("/research/rgs01/project_space/relligrp/pgx/common/data/patient/snpchip/cnv/lc50.cn.som.seg.biostat.201704.RData")
+totxv.cn.data <- cn.data.som[rownames(cn.data.som) %in%  cn.result.stat$Probe.Set.ID,]
+
+#rownames (totxv.cn.data) <- totxv.cn.data$Probe.Set.ID
+#totxv.cn.data$Probe.Set.ID <- NULL
+
+#totxv.cn.data <- totxv.cn.data[,grepl("_Somatic", colnames(totxv.cn.data))] 
+#colnames (totxv.cn.data) <- gsub ("_Somatic", "", colnames (totxv.cn.data))
+
+#totxv.cn.smooth.data <- cn.result.smooth[cn.result.stat[,1],]
+#totxv.cn.smooth.data <- totxv.cn.smooth.data[,grepl("_Somatic", colnames(totxv.cn.smooth.data))] 
+#colnames (totxv.cn.smooth.data) <- gsub ("_Somatic", "", colnames (totxv.cn.smooth.data))
+
+mtt.select <- mtt.prep(drug)
+source("drugcatadjust.R")
+
+rownames(mtt.select) <- mtt.select$MRN
+mtt.select.b <- subset (mtt.select, mtt.select$LIN == "B")
+
+mtt.select.b <- subset (mtt.select.b, mtt.select.b$PROT == "TOTXV")
+
+mtt.select.b <- subset (mtt.select.b, mtt.select.b$LC50.GROUP %in% c(1,3))
+
+
+
+cn.pt.int <- intersect (mtt.select.b$MRN, colnames (totxv.cn.data))
+
+totxv.cn.data <- totxv.cn.data[,as.character(cn.pt.int)]
+#totxv.cn.smooth.data <- totxv.cn.smooth.data[,as.character(cn.pt.int)]
+
+mtt.select.b <- mtt.select.b[mtt.select.b$MRN %in% cn.pt.int,]
+rownames (mtt.select.b) <- mtt.select.b$MRN
+
+mtt.select.b <- mtt.select.b[as.character(cn.pt.int),]
+
+
+totxv.cn.data <- as.matrix (totxv.cn.data)
+#totxv.cn.smooth.data <- as.matrix(totxv.cn.smooth.data)
+
+
+totxv.drug.cat <- mtt.select.b$LC50.GROUP
+
+
+cn.cutoff <- read.delim ("cncutoff.txt", header=FALSE)
+cn.cutoff <- unlist (cn.cutoff)
+names (cn.cutoff) <- NULL
+
+cn.result.stat <- subset (cn.result.stat, cn.result.stat$p.b <= max(cn.cutoff))
+cn.result.stat <- cn.result.stat[order(cn.result.stat$p.b),]
+
+cn.cutoff.index <- unlist(read.delim("cncutoffindex.txt", as.is=TRUE, stringsAsFactors=FALSE, header=FALSE))
+
+names (cn.cutoff.index) <- NULL
+
+cn.result.stat <- cn.result.stat[1:max(cn.cutoff.index),]
+
+
+cn.probes.int <- cn.result.stat[,1]
+
+cn.probes.int <- cn.probes.int[!is.na(cn.probes.int)]
+totxv.cn.data <- totxv.cn.data[cn.probes.int,]
+#totxv.cn.smooth.data <- totxv.cn.smooth.data[cn.probes.int,]
+
+#R <- rev(row.names(totxv.cn.data))
+#totxv.cn.data <- totxv.cn.data[R,]
+
+dim (totxv.cn.data)
+
+totxv.cn.hc1 <- hcluster (totxv.cn.data, method = "cor", diag = FALSE, upper = FALSE, link = "ward", members = NULL, doubleprecision = FALSE)
+
+totxv.cn.hc2 <- hcluster (t(totxv.cn.data), method = "cor", diag = FALSE, upper = FALSE, link = "ward", members = NULL, doubleprecision = FALSE)
+
+totxv.cn.clust.p <- fisher.test(table(cutree(totxv.cn.hc2, k=2), totxv.drug.cat))$p.value
+totxv.cn.clust.p
+
+totxv.cn.hc2 <- reorder(as.dendrogram(totxv.cn.hc2), mtt.select.b[,"LC50"], agglo.FUN=mean)
+
+
+totxv.cn.hc1 <- as.dendrogram(totxv.cn.hc1)
+
+totxv.cn.data <- totxv.cn.data[order.dendrogram(totxv.cn.hc1), order.dendrogram(totxv.cn.hc2)]
+totxv.cn.phenotype.b <- mtt.select.b$LC50.GROUP
+#rm (cn.result)
+#rm (cn.result.smooth)
+
+@ 
+
+<<totxvicnsnpprep>>=
+
+load ("/home/rautry/drworkflow_data/cn.data.som.seg.biostat.201607a.RData")
+colnames(cn.data.som) <- gsub(".somatic","",colnames(cn.data.som))
+
+
+totxvi.cn.data <- cn.data.som[cn.probes.int,]
+
+mtt.select <- mtt.prep(drug)
+source("drugcatadjust.R")
+
+rownames(mtt.select) <- mtt.select$MRN
+mtt.select.b <- subset (mtt.select, mtt.select$LIN == "B")
+mtt.select.b <- subset (mtt.select.b, mtt.select.b$PROT == "TOTXVI")
+mtt.select.b <- subset (mtt.select.b, mtt.select.b$LC50.GROUP %in% c(1,3))
+
+
+cn.pt.int <- intersect (mtt.select.b$MRN, colnames (totxvi.cn.data))
+
+totxvi.cn.data <- totxvi.cn.data[,as.character(cn.pt.int)]
+#totxvi.cn.smooth.data <- totxvi.cn.smooth.data[,as.character(cn.pt.int)]
+
+mtt.select.b <- mtt.select.b[mtt.select.b$MRN %in% cn.pt.int,]
+rownames (mtt.select.b) <- mtt.select.b$MRN
+
+mtt.select.b <- mtt.select.b[as.character(cn.pt.int),]
+
+
+totxvi.cn.data <- as.matrix (totxvi.cn.data)
+#totxvi.cn.smooth.data <- as.matrix(totxvi.cn.smooth.data)
+
+dim (totxvi.cn.data)
+#totxvi.cn.data <- totxvi.cn.data[R,]
+
+totxvi.cn.hc1 <- hcluster (totxvi.cn.data, method = "cor", diag = FALSE, upper = FALSE, link = "ward", members = NULL, doubleprecision = FALSE)
+
+totxvi.cn.hc2 <- hcluster (t(totxvi.cn.data), method = "cor", diag = FALSE, upper = FALSE, link = "ward", members = NULL, doubleprecision = FALSE)
+
+totxvi.cn.clust.p <- fisher.test(table(cutree(totxvi.cn.hc2, k=2), mtt.select.b$LC50.GROUP))$p.value
+totxvi.cn.clust.p
+
+totxvi.cn.hc2 <- reorder(as.dendrogram(totxvi.cn.hc2), mtt.select.b[,"LC50"], agglo.FUN=mean)
+
+
+totxvi.cn.hc1 <- as.dendrogram(totxvi.cn.hc1)
+
+totxvi.cn.data <- totxvi.cn.data[order.dendrogram(totxv.cn.hc1), order.dendrogram(totxvi.cn.hc2)]
+totxvi.cn.data
+totxvi.cn.phenotype.b <- mtt.select.b$LC50.GROUP
+
+
+@ 
+
+
+
+
+<<cngeconnect>>=
+##########################################
+#Connections for cn to GE set up
+################################
+####
+#Reading in files####
+##
+
+load ("cn.data.som.seg.biostat.201607a.RData")
+colnames(cn.data.som) <- gsub(".somatic","",colnames(cn.data.som))
+# load ("lc50.cn.som.seg.biostat.201704.RData")
+ge.cn.sig.probes <- read.delim("ge_sig_probes_cn.tsv",header =FALSE, stringsAsFactors =FALSE)
+#Bonferroni method of p-value determination
+#number of 0.05/number of tests
+
+cnge.connect.cutoff<- (0.05 /(nrow(ge.cn.sig.probes) * nrow(cn.result.stat)))
+#cnge.connect.cutoff<- 1E-5
+if (drug %in% c("LASP","6MP","6TG")){
+cnge.connect.cutoff <- 0.001
+}
+
+cnge.connect.cutoff <- 0.001
+cnge.connect <- read.delim ("ge_cn_meta_sub.tsv", as.is=TRUE, stringsAsFactors=FALSE, header=FALSE)
+cnge.connect.cutoff
+head(cnge.connect)
+dim(cnge.connect)
+#Matching rownames of data to connection file
+cnge.connect2 <- subset (cnge.connect, cnge.connect$V1 %in% rownames (totxv.cn.data))
+
+#taking significant connections removing NAs and making sure they have a statistic value
+cnge.connect.sig <- cnge.connect2[cnge.connect2$V20 < cnge.connect.cutoff & !is.na(cnge.connect2$V20) & cnge.connect2$V19 > 0,]
+
+#applying columns to dataframe
+ge.anno <- as.data.frame(HG.U133_Plus_2.na31.annot.long, header = TRUE, stringsAsFactors = FALSE)
+#SNP.anno <- read.csv("combined_gene_snps_201601.csv", header =TRUE, stringsAsFactors =FALSE)
+#head(SNP.anno)
+#SNP.anno<- SNP.anno[!duplicated(SNP.anno$gene),]
+#head(SNP.anno)
+#dim(SNP.anno)
+#totxvi.cn.data 
+#head(ge.anno)
+#dim(cnge.connect.sig)
+cn.ge.indx <- match(cnge.connect.sig$V1, cn.seg.info$segid)
+cn.ge.indx <- cn.ge.indx[!is.na(cn.ge.indx)]
+
+
+ge.anno.cn <- cn.seg.info[cn.ge.indx,]
+head(ge.anno.cn)
+dim(ge.anno.cn)
+ge.cn.indx <- match(cnge.connect.sig$V2, ge.anno$Probe.Set.ID)
+#cn.ge.indx <- cn.ge.indx[!is.na(cn.ge.indx)]
+cn.anno.ge <- ge.anno[ge.cn.indx,]
+head(cn.anno.ge)
+dim(cn.anno.ge)
+#str(labels(all.ge.hc2))
+#str(labels(totxv.cn.hc1))
+
+
+
+
+cnge.connect.sig$cnorder <- apply (cnge.connect.sig, 1, function (x){which(x["V1"] == rownames(totxv.cn.data))})
+cnge.connect.sig$georder <- apply (cnge.connect.sig, 1, function (x){which(x["V2"] == rownames(xv.ge.data))})
+colnames(cnge.connect.sig) <- c("SNPProbeSetID","GEProbeSetID","totxv.t.p.b","totxv.t.stat.b","totxv.w.p.b","totxv.w.stat.b","totxv.lm.p.b","totxv.lm.stat.b","totxvi.t.p.b","totxvi.t.stat.b","totxvi.w.p.b","totxvi.w.stat.b","totxvi.lm.p.b","totxvi.lm.stat.b","all.t.p.b","all.t.stat.b","all.w.p.b","all.w.stat.b","all.lm.stat.b","all.lm.p.b","meta.stat.b","meta.p.b","cnorder","georder")
+cnge.connect.sig$loc.start <- unlist(as.numeric(ge.anno.cn$loc.start))
+cnge.connect.sig$loc.end <- unlist(as.numeric(ge.anno.cn$loc.end))
+cnge.connect.sig$ge.start <- unlist(as.numeric(cn.anno.ge$Start))
+cnge.connect.sig$ge.end <- unlist(as.numeric(cn.anno.ge$End))
+cnge.connect.sig$cnchr <- unlist(ge.anno.cn$chrom)
+cnge.connect.sig$gechr <- unlist(cn.anno.ge$Chr)
+cnge.connect.sig$samechr <- apply (cnge.connect.sig, 1, function (x){ifelse((x["cnchr"] == x["gechr"])== "TRUE", "TRUE","FALSE")})
+#nge.connect.sig$cistrans <- apply (cnge.connect.sig, 1, function (x){ifelse((x["cnchr"] == x["gechr"])== "TRUE", "CIS","TRANS")})
+cnge.connect.sig$distance <-  pmin(abs(cnge.connect.sig$loc.start - cnge.connect.sig$ge.start),abs(cnge.connect.sig$loc.end - cnge.connect.sig$ge.start), abs(cnge.connect.sig$loc.start - cnge.connect.sig$ge.end),abs(cnge.connect.sig$loc.end - cnge.connect.sig$ge.end))
+#(cnge.connect.sig$samechr == "TRUE" & cnge.connect.sig$distance <= 2000000)=="TRUE"
+#cnge.connect.sig$cistrans <- apply (cnge.connect.sig, 1, function (x){ifelse((x["samechr"] == "TRUE"), "CIS","TRANS")})
+for (i in 1:nrow(cnge.connect.sig)){
+  if (cnge.connect.sig$samechr[i] == "TRUE" & cnge.connect.sig$distance[i] <= 2000000){
+    cnge.connect.sig$cistrans[i] <- "CIS"
+  }else{
+cnge.connect.sig$cistrans[i]<- "TRANS"
+}
+}
+#output CSV file of CN to GE connections
+write.csv (cnge.connect.sig, file="TableS09.csv")
+
+@ 
+
+
+<<bigfig, fig=TRUE, width=18, height=15.5, include=FALSE>>=
+#########################################
+#############Figure Setup################
+#########################################
+
+
+bluered <- c("#0000FF", "#0D0DFF", "#1B1BFF", "#2828FF", "#3636FF", "#4343FF", 
+"#5151FF", "#5E5EFF", "#6B6BFF", "#7979FF", "#8686FF", "#9494FF", 
+"#A1A1FF", "#AEAEFF", "#BCBCFF", "#C9C9FF", "#D7D7FF", "#E4E4FF", 
+"#F2F2FF", "#FFFFFF", "#FFFFFF", "#FFF2F2", "#FFE4E4", "#FFD7D7", 
+"#FFC9C9", "#FFBCBC", "#FFAEAE", "#FFA1A1", "#FF9494", "#FF8686", 
+"#FF7979", "#FF6B6B", "#FF5E5E", "#FF5151", "#FF4343", "#FF3636", 
+"#FF2828", "#FF1B1B", "#FF0D0D", "#FF0000")
+
+
+
+#if (drug %in% c("PRED", "VCR", "LASP","6MP", "6TG")){
+ # x.pos <- c(0, 1, 2, 2.1, 3.1, 3.35, 4.65, 5.95, 6.05, 7.35, 7.45, 8.75, 10.05, 10.3, 11.3, 11.4, 12.4, 13.4)/13.4
+ # y.pos <- c(0, 1,   2, 2.05, 3.05, 3.9425, 5.05, 5.1, 6.1, 7.6, 8.6,  9.2075, 9.2575, 10.5575, 12.0575, 12.65, 12.7, 13.7, 15.2, 15.3)/15.3
+#}
+
+
+if ((drug %in% c("PRED", "VCR", "LASP", "6MP","6TG"))){
+  x.pos <- c(0, 1, 2, 2.1, 3.1, 3.35, 4.65, 5.95, 4.65, 5.95, 6.05, 7.35,  8.65,  8.9, 9.9,    10, 11, 12)/12  
+  y.pos <- c(0, 1,   2, 2.05, 3.05, 3.9425, 5.05, 5.1, 6.1, 7.6, 8.6,  9.2075, 9.2575, 10.5575, 12.0575, 12.65, 12.7, 13.7, 15.2, 15.3)/15.3
+}
+
+par (mar=c(0,0,0,0), las=1)
+plot (0,0,type="n", axes=FALSE, xlab="", ylab="")
+
+
+#########################################
+#########END Figure Setup################
+#########################################
+
+
+
+#########################################
+################Middle panel#############
+#########################################
+
+par(fig=c(x.pos[7], x.pos[12], y.pos[17],y.pos[18]), new=T)
+plot(0,0, type="n", xlab="", ylab="", axes=FALSE, ylim=c(-1,2))
+text (0,1, ifelse (drug == "PRED", "Prednisolone", ifelse (drug == "VCR", "Vincristine", ifelse (drug == "LASP", "Asparaginase", ifelse (drug == "CYTU", "Cytarabine", ifelse (drug == "DEX", "Dexamethasone", ifelse (drug == "6MP","6-Mercaptopurine", ifelse (drug == "6TG", "6-Thioguanine", ""))))))), cex=3)
+
+par(fig=c(x.pos[7], x.pos[12], y.pos[14],y.pos[15]), new=T)
+plot (0,0, type="n", xlab="", ylab="", axes=FALSE, ylim=c(-1,2))
+text (0,1.25, "mRNA Expression", cex=2, xpd=TRUE)
+
+
+
+par(fig=c(x.pos[9], x.pos[10], y.pos[14],y.pos[15]), new=T)
+plot (0,0, type="n", xlab="", ylab="", axes=FALSE)
+sciNotation(p=xv.ge.clust.p, mytext1="SJCRH", mytext2="TOTXV")
+
+par(fig=c(x.pos[9], x.pos[10], y.pos[13],y.pos[14]), new=T)
+plot (xv.ge.pt.hc, leaflab="none", axes=FALSE, xaxs="i")
+
+par(fig=c(x.pos[11], x.pos[12], y.pos[14],y.pos[15]), new=T)
+plot (0,0, type="n", xlab="", ylab="", axes=FALSE)
+sciNotation(p=xvi.ge.clust.p, mytext1="SJCRH", mytext2="TOTXVI")
+
+par(fig=c(x.pos[11], x.pos[12], y.pos[13],y.pos[14]), new=T)
+plot (xvi.ge.pt.hc, leaflab="none", axes=FALSE, xaxs="i")
+
+#if (drug %in% c("PRED", "VCR", "LASP","6MP", "6TG")){
+ # par(fig=c(x.pos[7], x.pos[8], y.pos[12],y.pos[13]), new=T)
+ # image(cbind(1:length(dutch.ge.col)), col = ifelse(dutch.ge.col ==1, "green", ifelse(dutch.ge.col == 3, "red", "gray"))[order.dendrogram(dutch.ge.pt.hc)], axes = FALSE)
+#}
+
+par(fig=c(x.pos[9], x.pos[10], y.pos[12],y.pos[13]), new=T)
+image(cbind(1:length(xv.ge.col)), col = ifelse(xv.ge.col ==1, "green", ifelse(xv.ge.col == 3, "red", "gray"))[order.dendrogram(xv.ge.pt.hc)], axes = FALSE)
+
+par(fig=c(x.pos[11], x.pos[12], y.pos[12],y.pos[13]), new=T)
+image(cbind(1:length(xvi.ge.col)), col = ifelse(xvi.ge.col ==1, "green", ifelse(xvi.ge.col == 3, "red", "gray"))[order.dendrogram(xvi.ge.pt.hc)], axes = FALSE)
+
+#if (drug %in% c("PRED", "VCR", "LASP","6MP", "6TG")){
+#par(fig=c(x.pos[7], x.pos[8], y.pos[6],y.pos[12]), new=T)
+#image(1:ncol(dutch.ge.data), 1:nrow(dutch.ge.data), t(dutch.ge.data), xlim = 0.5 + c(0, ncol(dutch.ge.data)), ylim = 0.5 + c(0, nrow(dutch.ge.data)), xlab = "", ylab = "", axes = FALSE, col = bluered, breaks = dutch.ge.breaks, frame.plot=TRUE)
+#}
+
+par(fig=c(x.pos[9], x.pos[10], y.pos[6],y.pos[12]), new=T)
+image(1:ncol(xv.ge.data), 1:nrow(xv.ge.data), t(xv.ge.data), xlim = 0.5 + c(0, ncol(xv.ge.data)), ylim = 0.5 + c(0, nrow(xv.ge.data)), xlab = "", ylab = "", axes = FALSE, col = bluered, breaks = xv.ge.breaks, frame.plot=TRUE)
+
+par(fig=c(x.pos[11], x.pos[12], y.pos[6],y.pos[12]), new=T)
+image(1:ncol(xvi.ge.data), 1:nrow(xvi.ge.data), t(xvi.ge.data), xlim = 0.5 + c(0, ncol(xvi.ge.data)), ylim = 0.5 + c(0, nrow(xvi.ge.data)), xlab = "", ylab = "", axes = FALSE, col = bluered, breaks = xvi.ge.breaks, frame.plot=TRUE)
+
+par(fig=c(x.pos[12], x.pos[13], y.pos[6],y.pos[12]), new=T)
+plot (all.ge.hc2, leaflab="none", axes=FALSE, yaxs="i", horiz=TRUE, xlim=c(0,attributes(all.ge.hc2)$height))
+
+par(fig=c(x.pos[7], x.pos[12], y.pos[6]-((x.pos[12]-x.pos[7])/10*18/13), y.pos[6]), new=T)
+plot (1,1, xlim=c(-10,10), ylim=c(-1,1), xaxs="i", yaxs="i", type="n", axes=FALSE)
+curve(-sqrt(1-(x-9)^2)+1, 9, 10, add=TRUE)
+curve(-sqrt(1-(x+9)^2)+1, -9, -10, add=TRUE)
+curve(sqrt(1-(x-1)^2)-1, 0, 1, add=TRUE)
+curve(sqrt(1-(x+1)^2)-1, -1, 0, add=TRUE)
+segments(-9,0,-1,0)
+segments(1,0,9,0)
+
+#if (drug %in% c("PRED", "VCR", "LASP","6MP", "6TG")){
+#  ge.meta.p <- pnorm((qnorm(xv.ge.clust.p/2) + qnorm(xvi.ge.clust.p/2)+qnorm(dutch.ge.clust.p/2))/sqrt(3))*2
+#}
+
+#if (!(drug %in% c("PRED", "VCR", "LASP","6MP", "6TG"))){
+  ge.meta.p <- pnorm((qnorm(xv.ge.clust.p/2) + qnorm(xvi.ge.clust.p/2))/sqrt(2))*2
+#}
+
+par(fig=c(x.pos[7], x.pos[12], (((y.pos[6]*14.7)-1)/14.7), y.pos[6]), new=T)
+plot (0,0, type="n", xlab="", ylab="", axes=FALSE)
+
+#if (drug %in% c("PRED", "VCR", "LASP","6MP", "6TG")){
+ # sciNotation(y=-0.5, p=ge.meta.p, type="oneline")
+#}
+
+#if (!(drug %in% c("PRED", "VCR", "LASP","6MP","6TG"))){
+  sciNotation(y=-0.25, p=ge.meta.p, type="oneline")
+#}
+
+#########################################
+#############END Middle panel############
+#########################################
+
+
+#########################################
+#### Upper left panel    ################
+#########################################
+par(fig=c(x.pos[2], x.pos[5], y.pos[18],y.pos[19]), new=T)
+plot (0,0, type="n", axes=FALSE, xlab="", ylab="", ylim=c(-1,2))
+text (0,1.25, "MicroRNA", cex=2, xpd=TRUE)
+
+par(fig=c(x.pos[2], x.pos[3], y.pos[18],y.pos[19]), new=T)
+plot (0,0, type="n", xlab="", ylab="", axes=FALSE)
+sciNotation(p=xv.mir.clust.p, mytext1="SJCRH", mytext2="TOTXV")
+
+par(fig=c(x.pos[4], x.pos[5], y.pos[18],y.pos[19]), new=T)
+plot (0,0, type="n", xlab="", ylab="", axes=FALSE)
+sciNotation(p=xvi.mir.clust.p, mytext1="SJCRH", mytext2="TOTXVI")
+
+par(fig=c(x.pos[2], x.pos[3], y.pos[11],y.pos[16]), new=T)
+image(1:ncol(totxv.mirdata.heat.b), 1:nrow(totxv.mirdata.heat.b), t(totxv.mirdata.heat.b), xlim = 0.5 + c(0, ncol(totxv.mirdata.heat.b)), ylim = 0.5 + c(0, nrow(totxv.mirdata.heat.b)), xlab = "", ylab = "", axes = FALSE, col = bluered, breaks = totxv.mirdata.heat.b.breaks, frame.plot=TRUE)
+
+par(fig=c(x.pos[4], x.pos[5], y.pos[11],y.pos[16]), new=T)
+image(1:ncol(totxvi.mirdata.heat.b), 1:nrow(totxvi.mirdata.heat.b), t(totxvi.mirdata.heat.b), xlim = 0.5 + c(0, ncol(totxvi.mirdata.heat.b)), ylim = 0.5 + c(0, nrow(totxvi.mirdata.heat.b)), xlab = "", ylab = "", axes = FALSE, col = bluered, breaks = totxvi.mirdata.heat.b.breaks, frame.plot=TRUE)
+
+par(fig=c(x.pos[1], x.pos[2], y.pos[11],y.pos[16]), new=T)
+plot (totxv.mir.hc1, leaflab="none", axes=FALSE, yaxs="i", horiz=TRUE)#need to make combined ordering
+
+par(fig=c(x.pos[2], x.pos[3], y.pos[16],y.pos[17]), new=T)
+image(cbind(1:length(totxv.mir.col)), col = ifelse(totxv.mir.col ==1, "green", ifelse(totxv.mir.col == 3, "red", "gray"))[order.dendrogram(totxv.mir.hc2)], axes = FALSE)
+
+par(fig=c(x.pos[4], x.pos[5], y.pos[16],y.pos[17]), new=T)
+image(cbind(1:length(totxvi.mir.col)), col = ifelse(totxvi.mir.col ==1, "green", ifelse(totxvi.mir.col == 3, "red", "gray"))[order.dendrogram(totxvi.mir.hc2)], axes = FALSE)
+
+par(fig=c(x.pos[2], x.pos[3], y.pos[17],y.pos[18]), new=T)
+plot (totxv.mir.hc2, leaflab="none", axes=FALSE, xaxs="i")
+
+par(fig=c(x.pos[4], x.pos[5], y.pos[17],y.pos[18]), new=T)
+plot (totxvi.mir.hc2, leaflab="none", axes=FALSE, xaxs="i")
+
+par(fig=c(x.pos[2], x.pos[5], y.pos[11]-((x.pos[5]-x.pos[2])/10*18/13), y.pos[11]), new=T)
+plot (1,1, xlim=c(-10,10), ylim=c(-1,1), xaxs="i", yaxs="i", type="n", axes=FALSE)
+curve(-sqrt(1-(x-9)^2)+1, 9, 10, add=TRUE)
+curve(-sqrt(1-(x+9)^2)+1, -9, -10, add=TRUE)
+curve(sqrt(1-(x-1)^2)-1, 0, 1, add=TRUE)
+curve(sqrt(1-(x+1)^2)-1, -1, 0, add=TRUE)
+segments(-9,0,-1,0)
+segments(1,0,9,0)
+
+
+mir.meta.p <- pnorm((qnorm(xv.mir.clust.p/2) + qnorm(xvi.mir.clust.p/2))/sqrt(2))*2
+
+par(fig=c(x.pos[2], x.pos[5], y.pos[10], y.pos[11]), new=T)
+plot (0,0, type="n", xlab="", ylab="", axes=FALSE)
+sciNotation(p=mir.meta.p, type="oneline")
+
+#########################################
+####END Upper left panel ################
+#########################################
+
+
+
+#########################################
+#### Upper right panel ##################
+#########################################
+par(fig=c(x.pos[14], x.pos[17], y.pos[18],y.pos[19]), new=T)
+plot (0,0, type="n", xlab="", ylab="", axes=FALSE, ylim=c(-1,2))
+text (0,1.25, "DNA methylation", cex=2, xpd=TRUE)
+
+par(fig=c(x.pos[14], x.pos[15], y.pos[18],y.pos[19]), new=T)
+plot (0,0, type="n", xlab="", ylab="", axes=FALSE)
+sciNotation(p=totxv.meth.clust.p, mytext1="SJCRH", mytext2="TOTXV")
+
+
+par(fig=c(x.pos[16], x.pos[17], y.pos[18],y.pos[19]), new=T)
+plot (0,0, type="n", xlab="", ylab="", axes=FALSE)
+sciNotation(p=totxvi.meth.clust.p, mytext1="SJCRH", mytext2="TOTXVI")
+
+par(fig=c(x.pos[14], x.pos[15], y.pos[17],y.pos[18]), new=T)
+plot (totxv.meth.hc2, leaflab="none", axes=FALSE, xaxs="i")
+
+par(fig=c(x.pos[16], x.pos[17], y.pos[17],y.pos[18]), new=T)
+plot (totxvi.meth.hc2, leaflab="none", axes=FALSE, xaxs="i")
+
+par(fig=c(x.pos[14], x.pos[15], y.pos[16],y.pos[17]), new=T)
+image(cbind(1:length(totxv.meth.phenotype.b)), col = ifelse(totxv.meth.phenotype.b ==1, "green", ifelse(totxv.meth.phenotype.b == 3, "red", "gray"))[order.dendrogram(totxv.meth.hc2)], axes = FALSE)
+
+par(fig=c(x.pos[16], x.pos[17], y.pos[16],y.pos[17]), new=T)
+image(cbind(1:length(totxvi.meth.phenotype.b)), col = ifelse(totxvi.meth.phenotype.b ==1, "green", ifelse(totxvi.meth.phenotype.b == 3, "red", "gray"))[order.dendrogram(totxvi.meth.hc2)], axes = FALSE)
+
+par(fig=c(x.pos[14], x.pos[15], y.pos[11],y.pos[16]), new=T)
+image(1:ncol(totxv.b.meth.data.heat), 1:nrow(totxv.b.meth.data.heat), as.matrix(t(totxv.b.meth.data.heat)), xlim = 0.5 + c(0, ncol(totxv.b.meth.data.heat)), ylim = 0.5 + c(0, nrow(totxv.b.meth.data.heat)), xlab="", ylab="", axes=FALSE, col=bluered, frame.plot=TRUE)
+
+par(fig=c(x.pos[16], x.pos[17], y.pos[11],y.pos[16]), new=T)
+image(1:ncol(totxvi.b.meth.data.heat), 1:nrow(totxvi.b.meth.data.heat), as.matrix(t(totxvi.b.meth.data.heat)), xlim = 0.5 + c(0, ncol(totxvi.b.meth.data.heat)), ylim = 0.5 + c(0, nrow(totxvi.b.meth.data.heat)), xlab="", ylab="", axes=FALSE, col=bluered, frame.plot=TRUE)
+
+par(fig=c(x.pos[17], x.pos[18], y.pos[11],y.pos[16]), new=T)
+plot (totxv.meth.hc1, leaflab="none", axes=FALSE, yaxs="i", horiz=TRUE, xlim=c(0, attributes(totxv.meth.hc1)$height))
+
+par(fig=c(x.pos[14], x.pos[17], y.pos[11]-((x.pos[17]-x.pos[14])/10*18/13), y.pos[11]), new=T)
+plot (1,1, xlim=c(-10,10), ylim=c(-1,1), xaxs="i", yaxs="i", type="n", axes=FALSE)
+curve(-sqrt(1-(x-9)^2)+1, 9, 10, add=TRUE)
+curve(-sqrt(1-(x+9)^2)+1, -9, -10, add=TRUE)
+curve(sqrt(1-(x-1)^2)-1, 0, 1, add=TRUE)
+curve(sqrt(1-(x+1)^2)-1, -1, 0, add=TRUE)
+segments(-9,0,-1,0)
+segments(1,0,9,0)
+
+meth.meta.p <- pnorm((qnorm(totxv.meth.clust.p/2) + qnorm(totxvi.meth.clust.p/2))/sqrt(2))*2
+
+par(fig=c(x.pos[14], x.pos[17], y.pos[10], y.pos[11]), new=T)
+plot (0,0, type="n", xlab="", ylab="", axes=FALSE)
+sciNotation(p=meth.meta.p, type="oneline")
+
+#########################################
+#### END Upper right panel ##############
+#########################################
+
+
+#########################################
+#### Lower right panel ##################
+#########################################
+
+
+par(fig=c(x.pos[14], x.pos[15], y.pos[9],y.pos[10]), new=T)
+plot (0,0, type="n", xlab="", ylab="", axes=FALSE)
+sciNotation(p=totxv.cn.clust.p, mytext1="SJCRH", mytext2="TOTXV")
+
+par(fig=c(x.pos[16], x.pos[17], y.pos[9],y.pos[10]), new=T)
+plot (0,0, type="n", xlab="", ylab="", axes=FALSE)
+sciNotation(p=totxvi.cn.clust.p, mytext1="SJCRH", mytext2="TOTXVI")
+
+par(fig=c(x.pos[14], x.pos[17], y.pos[9],y.pos[10]), new=T)
+plot (0,0, type="n", xlab="", ylab="", axes=FALSE, ylim=c(-1,2))
+text (0,1.25, "CNVs", cex=2, xpd=TRUE)
+
+par(fig=c(x.pos[17], x.pos[18], y.pos[2],y.pos[7]), new=T)
+plot (totxvi.cn.hc1, leaflab="none", axes=FALSE, yaxs="i", horiz=TRUE, xlim=c(0, attributes(totxvi.cn.hc1)$height))
+
+par(fig=c(x.pos[14], x.pos[15], y.pos[2],y.pos[7]), new=T)
+image(1:ncol(totxv.cn.data), 1:nrow(totxv.cn.data), t(totxv.cn.data), xlim = 0.5 + c(0, ncol(totxv.cn.data)), ylim = 0.5 + c(0, nrow(totxv.cn.data)), xlab = "", ylab = "", axes = FALSE, col=c(rgb(0,0,1,1), rgb(0,0,1,0.5), rgb(255,191,0, maxColorValue=255), rgb(1,0,0,0.5), rgb(1,0,0,1)), breaks=c(-1,0.5,1.5,2.5,3.5,4.5), frame.plot=TRUE)
+
+par(fig=c(x.pos[16], x.pos[17], y.pos[2],y.pos[7]), new=T)
+image(1:ncol(totxvi.cn.data), 1:nrow(totxvi.cn.data), t(totxvi.cn.data), xlim = 0.5 + c(0, ncol(totxvi.cn.data)), ylim = 0.5 + c(0, nrow(totxvi.cn.data)), xlab = "", ylab = "", axes = FALSE, col=c(rgb(0,0,1,1), rgb(0,0,1,0.5),  rgb(255,191,0, maxColorValue=255), rgb(1,0,0,0.5), rgb(1,0,0,1)), breaks=c(-1,0.5,1.5,2.5,3.5,4.5), frame.plot=TRUE)
+
+par(fig=c(x.pos[14], x.pos[15], y.pos[8],y.pos[9]), new=T)
+plot (totxv.cn.hc2, leaflab="none", axes=FALSE, xaxs="i")
+
+par(fig=c(x.pos[16], x.pos[17], y.pos[8],y.pos[9]), new=T)
+plot (totxvi.cn.hc2, leaflab="none", axes=FALSE, xaxs="i")
+
+par(fig=c(x.pos[14], x.pos[15], y.pos[7],y.pos[8]), new=T)
+image(cbind(1:length(totxv.cn.phenotype.b)), col = ifelse(totxv.cn.phenotype.b ==1, "green", ifelse(totxv.cn.phenotype.b == 3, "red", "gray"))[order.dendrogram(totxv.cn.hc2)], axes = FALSE, frame.plot=TRUE)
+
+par(fig=c(x.pos[16], x.pos[17], y.pos[7],y.pos[8]), new=T)
+image(cbind(1:length(totxvi.cn.phenotype.b)), col = ifelse(totxvi.cn.phenotype.b ==1, "green", ifelse(totxvi.cn.phenotype.b == 3, "red", "gray"))[order.dendrogram(totxvi.cn.hc2)], axes = FALSE, frame.plot=TRUE)
+
+par(fig=c(x.pos[14], x.pos[17], y.pos[2]-((x.pos[17]-x.pos[14])/10*18/13), y.pos[2]), new=T)
+plot (1,1, xlim=c(-10,10), ylim=c(-1,1), xaxs="i", yaxs="i", type="n", axes=FALSE)
+curve(-sqrt(1-(x-9)^2)+1, 9, 10, add=TRUE)
+curve(-sqrt(1-(x+9)^2)+1, -9, -10, add=TRUE)
+curve(sqrt(1-(x-1)^2)-1, 0, 1, add=TRUE)
+curve(sqrt(1-(x+1)^2)-1, -1, 0, add=TRUE)
+segments(-9,0,-1,0)
+segments(1,0,9,0)
+
+cn.meta.p <- pnorm((qnorm((totxv.cn.clust.p)/2) + qnorm(totxvi.cn.clust.p/2))/sqrt(2))*2
+par(fig=c(x.pos[14], x.pos[17], y.pos[1], y.pos[2]), new=T)
+plot (0,0, type="n", xlab="", ylab="", axes=FALSE)
+sciNotation(p=cn.meta.p, type="oneline")
+#########################################
+#### END Lower right panel ##############
+#########################################
+
+
+
+#########################################
+#############Lower left panel############
+#########################################
+
+par(fig=c(x.pos[2], x.pos[5], y.pos[9],y.pos[10]), new=T)
+plot (0,0, type="n", xlab="", ylab="", axes=FALSE, ylim=c(-1,2))
+text (0,1.25, "SNVs", cex=2, xpd=TRUE)
+
+par(fig=c(x.pos[2], x.pos[3], y.pos[9],y.pos[10]), new=T)
+plot (0,0, type="n", xlab="", ylab="", axes=FALSE)
+sciNotation(p=totxv.snp.clust.p, mytext1="SJCRH", mytext2="TOTXV")
+
+par(fig=c(x.pos[4], x.pos[5], y.pos[9],y.pos[10]), new=T)
+plot (0,0, type="n", xlab="", ylab="", axes=FALSE)
+sciNotation(p=totxvi.snp.clust.p, mytext1="SJCRH", mytext2="TOTXVI")
+
+par(fig=c(x.pos[2], x.pos[3], y.pos[2],y.pos[7]), new=T)
+image(1:ncol(totxv.snp.data), 1:nrow(totxv.snp.data), t(totxv.snp.data), xlim = 0.5 + c(0, ncol(totxv.snp.data)), ylim = 0.5 + c(0, nrow(totxv.snp.data)), xlab = "", ylab = "", axes = FALSE, col=c("black", "white", "gray", rgb(0,128,255, maxColorValue=255), rgb(255,191,0, maxColorValue=255), rgb(128,0,128, maxColorValue=255)), breaks=c(-3.5,-2.5,-1.5,-0.5,0.5,1.5,2.5), frame.plot=TRUE)
+
+par(fig=c(x.pos[4], x.pos[5], y.pos[2],y.pos[7]), new=T)
+image(1:ncol(totxvi.snp.data), 1:nrow(totxvi.snp.data), t(totxvi.snp.data), xlim = 0.5 + c(0, ncol(totxvi.snp.data)), ylim = 0.5 + c(0, nrow(totxvi.snp.data)), xlab = "", ylab = "", axes = FALSE, col=c("black", "white", "gray", rgb(0,128,255, maxColorValue=255), rgb(255,191,0, maxColorValue=255), rgb(128,0,128, maxColorValue=255)), breaks=c(-3.5,-2.5,-1.5,-0.5,0.5,1.5,2.5), frame.plot=TRUE)
+
+par(fig=c(x.pos[1], x.pos[2], y.pos[2],y.pos[7]), new=T)
+plot (totxv.snp.hc1, leaflab="none", horiz=TRUE, axes=FALSE, xaxs="i", yaxs="i")
+
+par(fig=c(x.pos[2], x.pos[3], y.pos[7],y.pos[8]), new=T)
+image(cbind(1:length(totxv.snp.phenotype.b)), col = ifelse(totxv.snp.phenotype.b ==1, "green", ifelse(totxv.snp.phenotype.b == 3, "red", "gray"))[order.dendrogram(totxv.snp.hc2)], axes = FALSE)
+
+par(fig=c(x.pos[4], x.pos[5], y.pos[7],y.pos[8]), new=T)
+image(cbind(1:length(totxvi.snp.phenotype.b)), col = ifelse(totxvi.snp.phenotype.b ==1, "green", ifelse(totxvi.snp.phenotype.b == 3, "red", "gray"))[order.dendrogram(totxvi.snp.hc2)], axes = FALSE)
+
+par(fig=c(x.pos[2], x.pos[3], y.pos[8],y.pos[9]), new=T)
+plot (totxv.snp.hc2, leaflab="none", axes=FALSE, xaxs="i")
+
+par(fig=c(x.pos[4], x.pos[5], y.pos[8],y.pos[9]), new=T)
+plot (totxvi.snp.hc2, leaflab="none", axes=FALSE, xaxs="i")
+
+par(fig=c(x.pos[2], x.pos[5], y.pos[2]-((x.pos[5]-x.pos[2])/10*18/13), y.pos[2]), new=T)
+plot (1,1, xlim=c(-10,10), ylim=c(-1,1), xaxs="i", yaxs="i", type="n", axes=FALSE)
+curve(-sqrt(1-(x-9)^2)+1, 9, 10, add=TRUE)
+curve(-sqrt(1-(x+9)^2)+1, -9, -10, add=TRUE)
+curve(sqrt(1-(x-1)^2)-1, 0, 1, add=TRUE)
+curve(sqrt(1-(x+1)^2)-1, -1, 0, add=TRUE)
+segments(-9,0,-1,0)
+segments(1,0,9,0)
+
+snp.meta.p <- pnorm((qnorm(totxv.snp.clust.p/2) + qnorm(totxvi.snp.clust.p/2))/sqrt(2))*2
+snp.meta.p
+par(fig=c(x.pos[2], x.pos[5], y.pos[1],  y.pos[2]), new=T)
+plot (0,0, type="n", xlab="", ylab="", axes=FALSE)
+sciNotation(p=snp.meta.p, type="oneline")
+#########################################
+#########END Lower left panel############
+#########################################
+
+
+
+#########################################
+####START upper left connections ########
+#########################################
+
+
+par(fig=c(x.pos[5],x.pos[7],y.pos[6],y.pos[16]), new=T)
+
+unitsize <- nrow(totxv.mirdata.heat.b)/(y.pos[16]-y.pos[11])
+boxsize <- y.pos[16]-y.pos[6]
+
+upperlimit <- 0.5+floor(unitsize*boxsize)
+
+lowerlimit <- 0.5-unitsize*boxsize+floor(unitsize*boxsize)
+
+offset <- floor(unitsize*boxsize)-nrow(totxv.mirdata.heat.b)
+
+geunitsize <- (y.pos[12]-y.pos[6])/nrow(xv.ge.data)
+
+multi.unit <- (upperlimit-lowerlimit)/(boxsize/geunitsize)
+
+par(fig=c(x.pos[5],x.pos[7],y.pos[6],y.pos[16]), new=T)
+
+plot(0,0, xlim=c(0,1), ylim=c(lowerlimit, upperlimit), axes=FALSE, xaxs="i", yaxs="i", type="n")
+
+for (i in 1:nrow(mir.connect)){
+   lines (c(0,1), c(mir.connect[i,"mirorder"]+offset,(mir.connect[i,"georder"]-0.5)*multi.unit+lowerlimit), col=rgb(0,0,1,0.75))
+}
+
+#########################################
+####END upper left connections ##########
+#########################################
+
+#########################################
+####START upper right connections #######
+#########################################
+
+
+par(fig=c(x.pos[12],x.pos[14],y.pos[6],y.pos[16]), new=T)
+
+unitsize <- nrow(totxv.b.meth.data.heat)/(y.pos[16]-y.pos[11])
+boxsize <- y.pos[16]-y.pos[6]
+
+upperlimit <- 0.5+floor(unitsize*boxsize)
+
+lowerlimit <- 0.5-unitsize*boxsize+floor(unitsize*boxsize)
+
+offset <- floor(unitsize*boxsize)-nrow(totxv.b.meth.data.heat)
+
+geunitsize <- (y.pos[12]-y.pos[6])/nrow(xv.ge.data)
+
+multi.unit <- (upperlimit-lowerlimit)/(boxsize/geunitsize)
+
+plot(0,0, xlim=c(0,1), ylim=c(lowerlimit, upperlimit), axes=FALSE, xaxs="i", yaxs="i", type="n")
+
+for (i in 1:nrow(methge)){
+   lines (c(1,0), c(methge[i,"methorder"]+offset,(methge[i,"georder"]-0.5)*multi.unit+lowerlimit), col=rgb(1,0,0,0.75))
+}
+
+#########################################
+####END upper right connections #########
+#########################################
+
+
+#########################################
+####START lower left connections ########
+#########################################
+
+par(fig=c(x.pos[5],x.pos[7],y.pos[2],y.pos[12]), new=T)
+ 
+unitsize <- nrow(totxvi.snp.data)/(y.pos[7]-y.pos[2])
+unitsize
+
+boxsize <- y.pos[12]-y.pos[2]
+boxsize
+
+lowerlimit <- 0.5
+lowerlimit
+
+upperlimit <- unitsize*boxsize+0.5
+upperlimit
+
+geunitsize <- (y.pos[12]-y.pos[6])/nrow(xv.ge.data)
+
+offset <- unitsize*((y.pos[12]-y.pos[2])-(y.pos[12]-y.pos[6]))
+offset
+
+multi.unit <- (upperlimit-lowerlimit)/(boxsize/geunitsize)
+multi.unit
+
+plot(0,0, xlim=c(0,1), ylim=c(lowerlimit, upperlimit), axes=FALSE, xaxs="i", yaxs="i", type="n")
+
+for (i in 1:nrow(snp.ge.result)){
+   lines (c(0,1), c(snp.ge.result[i,"snporder"],(snp.ge.result[i,"georder"]-0.5)*multi.unit+lowerlimit+offset), col=rgb(0,1,0,0.75))
+}
+
+#########################################
+####END lower left connections ##########
+#########################################
+
+
+#########################################
+####START lower right connections #######
+#########################################
+
+
+#par(fig=c(x.pos[5],x.pos[7],y.pos[6],y.pos[16]), new=T)
+par(fig=c(x.pos[12],x.pos[14],y.pos[2],y.pos[12]), new=T)
+
+         
+ 
+unitsize <- nrow(totxvi.cn.data)/(y.pos[7]-y.pos[2])
+unitsize
+
+boxsize <- y.pos[12]-y.pos[2]
+boxsize
+
+#lowerlimit <- 0.5+floor(unitsize*boxsize)
+#lowerlimit
+lowerlimit <- 0.5
+lowerlimit
+
+#upperlimit <- 0.5-unitsize*boxsize+floor(unitsize*boxsize)
+#upperlimit
+upperlimit <- unitsize*boxsize+0.5
+upperlimit
+
+geunitsize <- (y.pos[12]-y.pos[6])/nrow(xv.ge.data)
+
+#offset <- floor(unitsize*boxsize)-nrow(totxvi.snp.data)
+#offset
+offset <- unitsize*((y.pos[12]-y.pos[2])-(y.pos[12]-y.pos[6]))
+offset
+
+multi.unit <- (upperlimit-lowerlimit)/(boxsize/geunitsize)
+multi.unit
+
+
+plot(0,0, xlim=c(0,1), ylim=c(lowerlimit, upperlimit), axes=FALSE, xaxs="i", yaxs="i", type="n")
+
+myleftcon <- sample (1:nrow(xv.ge.data), nrow(xv.ge.data)-5, replace=TRUE)
+myrightcon <- sample(1:nrow(totxvi.cn.data), nrow(xv.ge.data)-5, replace=TRUE)
+numcon <- (myleftcon) + (myrightcon)
+
+#for (i in 1:nrow(snp.ge.result)){
+#for (i in 1:length(myleftcon)){
+
+#num.con <- sample((nrow(xv.ge.data)-10):nrow(xv.ge.data), 1)
+#   lines (c(0,1), c(snp.ge.result[i,"snporder"],(snp.ge.result[i,"georder"]-0.5)*multi.unit+lowerlimit+offset), col=rgb(0,1,0,0.75))
+   #lines (c(1,0), c(myrightcon[i],(myleftcon[i]-0.5)*multi.unit+lowerlimit+offset), col=rgb(1,0,1,0.75))
+
+#}
+
+#lines (c(0,1), c(1, (1-0.5)*multi.unit+lowerlimit+offset), col="black")
+#for (i in 1:nrow(snp.ge.result)){
+  # lines (c(0,1), c(cnge.connect.sig[i,"cnorder"],(cnge.connect.sig[i,"georder"]-0.5)*multi.unit+lowerlimit+offset), col=rgb(1,0,1,0.75))
+#}
+
+##Drawing cis lines after trans lines will help them show over top of the many trans connections
+cnge.connect.sig.cis <- subset(cnge.connect.sig, cnge.connect.sig$cistrans == "CIS")
+cnge.connect.sig.trans <- subset(cnge.connect.sig, cnge.connect.sig$cistrans == "TRANS")
+#for (i in 1:nrow(snp.ge.result)){
+  # lines (c(0,1), c(cnge.connect.sig[i,"cnorder"],(cnge.connect.sig[i,"georder"]-0.5)*multi.unit+lowerlimit+offset), col=rgb(1,0,1,0.75))
+#}
+
+##Drawing cis lines after trans lines will help them show over top of the many trans connections
+cnge.connect.sig.cis <- subset(cnge.connect.sig, cnge.connect.sig$cistrans == "CIS")
+cnge.connect.sig.trans <- subset(cnge.connect.sig, cnge.connect.sig$cistrans == "TRANS")
+if(nrow(cnge.connect.sig.trans) >0 ){
+for (i in 1:nrow(cnge.connect.sig.trans)){
+if (drug == "PRED"){
+ lines (c(1,0), c(cnge.connect.sig.trans[i,"cnorder"],(cnge.connect.sig.trans[i,"georder"]-0.5)*multi.unit+lowerlimit+offset),col= rgb(0,1,1,0.5))
+}else{
+ lines (c(1,0), c(cnge.connect.sig.trans[i,"cnorder"],(cnge.connect.sig.trans[i,"georder"]-0.5)*multi.unit+lowerlimit+offset),col= rgb(0,1,1,0.5))
+}
+}
+}
+if(nrow(cnge.connect.sig.cis) >0 ){
+for (i in 1:nrow(cnge.connect.sig.cis)){
+if (drug == "PRED"){
+ lines (c(1,0), c(cnge.connect.sig.cis[i,"cnorder"],(cnge.connect.sig.cis[i,"georder"]-0.5)*multi.unit+lowerlimit+offset),col= rgb(1,0,1,1))
+}else{
+ lines (c(1,0), c(cnge.connect.sig.cis[i,"cnorder"],(cnge.connect.sig.cis[i,"georder"]-0.5)*multi.unit+lowerlimit+offset),col= rgb(1,0,1,0.5))
+}
+}
+}
+#for (i in 1:nrow(cnge.connect.sig)){
+#if (drug == "PRED"){
+# lines (c(1,0), c(cnge.connect.sig[i,"cnorder"],(cnge.connect.sig[i,"georder"]-0.5)*multi.unit+lowerlimit+offset),col=ifelse(cnge.connect.sig$cistrans[i] =="CIS" ,rgb(1,0,1,1), rgb(0.73,1,1,0.05)))
+#}else{
+ #lines (c(1,0), c(cnge.connect.sig[i,"cnorder"],(cnge.connect.sig[i,"georder"]-0.5)*multi.unit+lowerlimit+offset),col=ifelse(cnge.connect.sig$cistrans[i] =="CIS" ,rgb(1,0,1,1), rgb(0.73,1,1,0.5)))
+#}
+#}
+#lty= ifelse(cnge.connect.sig$cistrans[i] =="CIS",1,3
+#lines(c(1,0),c(0.5,762.4802), col = "red")
+#lines(c(1,0),c(300,(56-0.5)*multi.unit+lowerlimit+offset), col = "green", lty = "dotted")
+#########################################
+####END lower right connections #########
+#########################################
+
+
+@ 
+
+
+
+<<snpgefig, fig=TRUE, width=18, height=9, include=FALSE>>=
+
+
+#########################################
+#############Figure Setup################
+#########################################
+
+
+bluered <- c("#0000FF", "#0D0DFF", "#1B1BFF", "#2828FF", "#3636FF", "#4343FF", 
+"#5151FF", "#5E5EFF", "#6B6BFF", "#7979FF", "#8686FF", "#9494FF", 
+"#A1A1FF", "#AEAEFF", "#BCBCFF", "#C9C9FF", "#D7D7FF", "#E4E4FF", 
+"#F2F2FF", "#FFFFFF", "#FFFFFF", "#FFF2F2", "#FFE4E4", "#FFD7D7", 
+"#FFC9C9", "#FFBCBC", "#FFAEAE", "#FFA1A1", "#FF9494", "#FF8686", 
+"#FF7979", "#FF6B6B", "#FF5E5E", "#FF5151", "#FF4343", "#FF3636", 
+"#FF2828", "#FF1B1B", "#FF0D0D", "#FF0000")
+
+
+
+if (drug %in% c("PRED", "VCR", "LASP")){
+  x.pos <- c(0, 1, 2, 2.1, 3.1, 3.35, 4.65, 5.95, 6.05, 7.35, 7.45, 8.75, 10.05)/10.05
+ x.pos <- c(0, 1, 2, 2.1, 3.1, 3.35, 4.65, 5.65, 5.75, 6.75, 6.85, 7.85, 8.85)/8.85
+#10.3, 11.3, 11.4, 12.4, 13.4)/13.4
+#            1  2  3   4    5     6     7     8     9    10    11    12    13     14    15    16   17    18
+#            M  M  M   M    M
+#                                       G     G     G    G     G     G     G    
+
+ y.pos <- c(0, 1,   2, 2.05, 3.05, 3.9425, 5.05, 5.1, 6.1, 7.6)/7.6
+
+#, 8.6,  9.2075, 9.2575, 10.5575, 12.0575, 12.65, 12.7, 13.7, 15.2, 15.3)/15.3
+#            1  2    3  4     5      6       7     8   9     10  11     12      13       14      15       16       17  18    19    20   
+
+
+}
+
+
+#if ((drug %in% c("PRED", "VCR", "LASP"))){
+ # x.pos <- c(0, 1, 2, 2.1, 3.1, 3.35, 4.65, 5.95, 4.65, 5.95, 6.05, 7.35,  8.65,  8.9, 9.9,    10, 11, 12)/12  
+ # y.pos <- c(0, 1,   2, 2.05, 3.05, 3.9425, 5.05, 5.1, 6.1, 7.6, 8.6,  9.2075, 9.2575, 10.5575, 12.0575, 12.65, 12.7, 13.7, 15.2, 15.3)/15.3
+#}
+
+par (mar=c(0,0,0,0), las=1)
+plot (0,0,type="n", axes=FALSE, xlab="", ylab="")
+
+
+#########################################
+#########END Figure Setup################
+#########################################
+#########################################
+#############Lower left panel############
+#########################################
+
+par(fig=c(x.pos[2], x.pos[5], y.pos[9],y.pos[10]), new=T)
+plot (0,0, type="n", xlab="", ylab="", axes=FALSE, ylim=c(-1,2))
+text (0,1.25, "SNVs", cex=2, xpd=TRUE)
+
+par(fig=c(x.pos[2], x.pos[3], y.pos[9],y.pos[10]), new=T)
+plot (0,0, type="n", xlab="", ylab="", axes=FALSE)
+sciNotation(p=totxv.snp.clust.p, mytext1="SJCRH", mytext2="TOTXV")
+
+par(fig=c(x.pos[4], x.pos[5], y.pos[9],y.pos[10]), new=T)
+plot (0,0, type="n", xlab="", ylab="", axes=FALSE)
+sciNotation(p=totxvi.snp.clust.p, mytext1="SJCRH", mytext2="TOTXVI")
+
+par(fig=c(x.pos[2], x.pos[3], y.pos[2],y.pos[7]), new=T)
+image(1:ncol(totxv.snp.data), 1:nrow(totxv.snp.data), t(totxv.snp.data), xlim = 0.5 + c(0, ncol(totxv.snp.data)), ylim = 0.5 + c(0, nrow(totxv.snp.data)), xlab = "", ylab = "", axes = FALSE, col=c("black", "white", "gray", rgb(0,128,255, maxColorValue=255), rgb(255,191,0, maxColorValue=255), rgb(128,0,128, maxColorValue=255)), breaks=c(-3.5,-2.5,-1.5,-0.5,0.5,1.5,2.5), frame.plot=TRUE)
+
+par(fig=c(x.pos[4], x.pos[5], y.pos[2],y.pos[7]), new=T)
+image(1:ncol(totxvi.snp.data), 1:nrow(totxvi.snp.data), t(totxvi.snp.data), xlim = 0.5 + c(0, ncol(totxvi.snp.data)), ylim = 0.5 + c(0, nrow(totxvi.snp.data)), xlab = "", ylab = "", axes = FALSE, col=c("black", "white", "gray", rgb(0,128,255, maxColorValue=255), rgb(255,191,0, maxColorValue=255), rgb(128,0,128, maxColorValue=255)), breaks=c(-3.5,-2.5,-1.5,-0.5,0.5,1.5,2.5), frame.plot=TRUE)
+
+par(fig=c(x.pos[1], x.pos[2], y.pos[2],y.pos[7]), new=T)
+plot (totxv.snp.hc1, leaflab="none", horiz=TRUE, axes=FALSE, xaxs="i", yaxs="i")
+
+par(fig=c(x.pos[2], x.pos[3], y.pos[7],y.pos[8]), new=T)
+image(cbind(1:length(totxv.snp.phenotype.b)), col = ifelse(totxv.snp.phenotype.b ==1, "green", ifelse(totxv.snp.phenotype.b == 3, "red", "gray"))[order.dendrogram(totxv.snp.hc2)], axes = FALSE)
+
+par(fig=c(x.pos[4], x.pos[5], y.pos[7],y.pos[8]), new=T)
+image(cbind(1:length(totxvi.snp.phenotype.b)), col = ifelse(totxvi.snp.phenotype.b ==1, "green", ifelse(totxvi.snp.phenotype.b == 3, "red", "gray"))[order.dendrogram(totxvi.snp.hc2)], axes = FALSE)
+
+par(fig=c(x.pos[2], x.pos[3], y.pos[8],y.pos[9]), new=T)
+plot (totxv.snp.hc2, leaflab="none", axes=FALSE, xaxs="i")
+
+par(fig=c(x.pos[4], x.pos[5], y.pos[8],y.pos[9]), new=T)
+plot (totxvi.snp.hc2, leaflab="none", axes=FALSE, xaxs="i")
+
+par(fig=c(x.pos[2], x.pos[5], y.pos[2]-((x.pos[5]-x.pos[2])/10*18/13), y.pos[2]), new=T)
+plot (1,1, xlim=c(-10,10), ylim=c(-1,1), xaxs="i", yaxs="i", type="n", axes=FALSE)
+curve(-sqrt(1-(x-9)^2)+1, 9, 10, add=TRUE)
+curve(-sqrt(1-(x+9)^2)+1, -9, -10, add=TRUE)
+curve(sqrt(1-(x-1)^2)-1, 0, 1, add=TRUE)
+curve(sqrt(1-(x+1)^2)-1, -1, 0, add=TRUE)
+segments(-9,0,-1,0)
+segments(1,0,9,0)
+
+snp.meta.p <- pnorm((qnorm(totxv.snp.clust.p/2) + qnorm(totxvi.snp.clust.p/2))/sqrt(2))*2
+snp.meta.p
+par(fig=c(x.pos[2], x.pos[5], y.pos[1],  y.pos[2]), new=T)
+plot (0,0, type="n", xlab="", ylab="", axes=FALSE)
+sciNotation(p=snp.meta.p, type="oneline")
+#########################################
+#########END Lower left panel############
+#########################################
+
+
+
+#########################################
+################Middle panel#############
+#########################################
+
+#par(fig=c(x.pos[7], x.pos[12], y.pos[17],y.pos[18]), new=T)
+#plot(0,0, type="n", xlab="", ylab="", axes=FALSE, ylim=c(-1,2))
+#text (0,1, ifelse (drug == "PRED", "Prednisolone", ifelse (drug == "VCR", "Vincristine", ifelse (drug == "LASP", "Asparaginase", ifelse (drug == "CYTU", "Cytarabine", ifelse (drug == "DEX", "Dexamethasone", ifelse (drug == "6MP","6-Mercaptopurine", ifelse (drug == "6TG", "6-Thioguanine", ""))))))), cex=3)
+
+par(fig=c(x.pos[7], x.pos[10], y.pos[9],y.pos[10]), new=T)
+plot (0,0, type="n", xlab="", ylab="", axes=FALSE, ylim=c(-1,2))
+text (0,1.25, "mRNA Expression", cex=2, xpd=TRUE)
+
+#if (drug %in% c("PRED", "VCR", "LASP")){
+ # par(fig=c(x.pos[7], x.pos[8], y.pos[9],y.pos[10]), new=T)
+ # plot (0,0, type="n", xlab="", ylab="", axes=FALSE)
+ # sciNotation(p=dutch.ge.clust.p, mytext2="Dutch")
+#}
+
+#if (drug %in% c("PRED", "VCR", "LASP")){
+#  par(fig=c(x.pos[7], x.pos[8], y.pos[8],y.pos[9]), new=T)
+ # plot (dutch.ge.pt.hc, leaflab="none", axes=FALSE, xaxs="i")
+#}
+
+par(fig=c(x.pos[7], x.pos[8], y.pos[9],y.pos[10]), new=T)
+plot (0,0, type="n", xlab="", ylab="", axes=FALSE)
+sciNotation(p=xv.ge.clust.p, mytext1="SJCRH", mytext2="TOTXV")
+
+par(fig=c(x.pos[7], x.pos[8], y.pos[8],y.pos[9]), new=T)
+plot (xv.ge.pt.hc, leaflab="none", axes=FALSE, xaxs="i")
+
+par(fig=c(x.pos[9], x.pos[10], y.pos[9],y.pos[10]), new=T)
+plot (0,0, type="n", xlab="", ylab="", axes=FALSE)
+sciNotation(p=xvi.ge.clust.p, mytext1="SJCRH", mytext2="TOTXVI")
+
+par(fig=c(x.pos[9], x.pos[10], y.pos[8],y.pos[9]), new=T)
+plot (xvi.ge.pt.hc, leaflab="none", axes=FALSE, xaxs="i")
+
+#if (drug %in% c("PRED", "VCR", "LASP")){
+ # par(fig=c(x.pos[7], x.pos[8], y.pos[7],y.pos[8]), new=T)
+ # image(cbind(1:length(dutch.ge.col)), col = ifelse(dutch.ge.col ==1, "green", ifelse(dutch.ge.col == 3, "red", "gray"))[order.dendrogram(dutch.ge.pt.hc)], axes = FALSE)
+#}
+
+par(fig=c(x.pos[9], x.pos[10], y.pos[7],y.pos[8]), new=T)
+image(cbind(1:length(xv.ge.col)), col = ifelse(xv.ge.col ==1, "green", ifelse(xv.ge.col == 3, "red", "gray"))[order.dendrogram(xv.ge.pt.hc)], axes = FALSE)
+
+par(fig=c(x.pos[9], x.pos[10], y.pos[7],y.pos[8]), new=T)
+image(cbind(1:length(xvi.ge.col)), col = ifelse(xvi.ge.col ==1, "green", ifelse(xvi.ge.col == 3, "red", "gray"))[order.dendrogram(xvi.ge.pt.hc)], axes = FALSE)
+
+#if (drug %in% c("PRED", "VCR", "LASP")){
+#par(fig=c(x.pos[7], x.pos[8], y.pos[2],y.pos[7]), new=T)
+#image(1:ncol(dutch.ge.data), 1:nrow(dutch.ge.data), t(dutch.ge.data), xlim = 0.5 + c(0, ncol(dutch.ge.data)), ylim = 0.5 + c(0, nrow(dutch.ge.data)), xlab = "", ylab = "", axes = FALSE, col = bluered, breaks = dutch.ge.breaks, frame.plot=TRUE)
+#}
+
+par(fig=c(x.pos[7], x.pos[8], y.pos[2],y.pos[7]), new=T)
+image(1:ncol(xv.ge.data), 1:nrow(xv.ge.data), t(xv.ge.data), xlim = 0.5 + c(0, ncol(xv.ge.data)), ylim = 0.5 + c(0, nrow(xv.ge.data)), xlab = "", ylab = "", axes = FALSE, col = bluered, breaks = xv.ge.breaks, frame.plot=TRUE)
+
+par(fig=c(x.pos[9], x.pos[10], y.pos[2],y.pos[7]), new=T)
+image(1:ncol(xvi.ge.data), 1:nrow(xvi.ge.data), t(xvi.ge.data), xlim = 0.5 + c(0, ncol(xvi.ge.data)), ylim = 0.5 + c(0, nrow(xvi.ge.data)), xlab = "", ylab = "", axes = FALSE, col = bluered, breaks = xvi.ge.breaks, frame.plot=TRUE)
+
+par(fig=c(x.pos[10], x.pos[12], y.pos[2],y.pos[7]), new=T)
+plot (all.ge.hc2, leaflab="none", axes=FALSE, yaxs="i", horiz=TRUE, xlim=c(0,attributes(all.ge.hc2)$height))
+
+#TODO(spaugh): Watch ratio change here for final output dimensions
+par(fig=c(x.pos[7], x.pos[10], y.pos[2]-((x.pos[5]-x.pos[2])/10*18/13), y.pos[2]), new=T)
+plot (1,1, xlim=c(-10,10), ylim=c(-1,1), xaxs="i", yaxs="i", type="n", axes=FALSE)
+curve(-sqrt(1-(x-9)^2)+1, 9, 10, add=TRUE)
+curve(-sqrt(1-(x+9)^2)+1, -9, -10, add=TRUE)
+curve(sqrt(1-(x-1)^2)-1, 0, 1, add=TRUE)
+curve(sqrt(1-(x+1)^2)-1, -1, 0, add=TRUE)
+segments(-9,0,-1,0)
+segments(1,0,9,0)
+
+#if (drug %in% c("PRED", "VCR", "LASP")){
+ # ge.meta.p <- pnorm((qnorm(xv.ge.clust.p/2) + qnorm(xvi.ge.clust.p/2)+qnorm(dutch.ge.clust.p/2))/sqrt(3))*2
+#}
+
+#if (!(drug %in% c("PRED", "VCR", "LASP"))){
+  ge.meta.p <- pnorm((qnorm(xv.ge.clust.p/2) + qnorm(xvi.ge.clust.p/2))/sqrt(2))*2
+#}
+
+par(fig=c(x.pos[7], x.pos[10], y.pos[1], y.pos[2]), new=T)
+plot (0,0, type="n", xlab="", ylab="", axes=FALSE)
+
+if (drug %in% c("PRED", "VCR", "LASP")){
+  sciNotation(p=ge.meta.p, type="oneline")
+}
+
+if (!(drug %in% c("PRED", "VCR", "LASP"))){
+  sciNotation(p=ge.meta.p, type="oneline")
+}
+
+#########################################
+#############END Middle panel############
+#########################################
+
+
+#########################################
+####START lower left connections ########
+#########################################
+
+par(fig=c(x.pos[5],x.pos[7],y.pos[2],y.pos[7]), new=T)
+ 
+unitsize <- nrow(totxvi.snp.data)/(y.pos[7]-y.pos[2])
+unitsize
+
+boxsize <- y.pos[7]-y.pos[2]
+boxsize
+
+lowerlimit <- 0.5
+lowerlimit
+
+upperlimit <- unitsize*boxsize+0.5
+upperlimit
+
+geunitsize <- (y.pos[7]-y.pos[2])/nrow(xv.ge.data)
+
+offset <- 0 #unitsize*((y.pos[12]-y.pos[2])-(y.pos[12]-y.pos[6]))
+offset
+
+multi.unit <- (upperlimit-lowerlimit)/(boxsize/geunitsize)
+multi.unit
+
+plot(0,0, xlim=c(0,1), ylim=c(lowerlimit, upperlimit), axes=FALSE, xaxs="i", yaxs="i", type="n")
+
+for (i in 1:nrow(snp.ge.result)){
+   lines (c(0,1), c(snp.ge.result[i,"snporder"],(snp.ge.result[i,"georder"]-0.5)*multi.unit+lowerlimit+offset), col=rgb(0,1,0,0.75))
+}
+
+#########################################
+####END lower left connections ##########
+#########################################
+
+
+
+
+@ 
+
+
+
+
+
+<<mirgefig, fig=TRUE, width=18, height=9, include=FALSE>>=
+
+
+#########################################
+#############Figure Setup################
+#########################################
+
+
+bluered <- c("#0000FF", "#0D0DFF", "#1B1BFF", "#2828FF", "#3636FF", "#4343FF", 
+"#5151FF", "#5E5EFF", "#6B6BFF", "#7979FF", "#8686FF", "#9494FF", 
+"#A1A1FF", "#AEAEFF", "#BCBCFF", "#C9C9FF", "#D7D7FF", "#E4E4FF", 
+"#F2F2FF", "#FFFFFF", "#FFFFFF", "#FFF2F2", "#FFE4E4", "#FFD7D7", 
+"#FFC9C9", "#FFBCBC", "#FFAEAE", "#FFA1A1", "#FF9494", "#FF8686", 
+"#FF7979", "#FF6B6B", "#FF5E5E", "#FF5151", "#FF4343", "#FF3636", 
+"#FF2828", "#FF1B1B", "#FF0D0D", "#FF0000")
+
+
+
+if (drug %in% c("PRED", "VCR", "LASP")){
+  x.pos <- c(0, 1, 2, 2.1, 3.1, 3.35, 4.65, 5.95, 6.05, 7.35, 7.45, 8.75, 10.05)/10.05
+x.pos <- c(0, 1, 2, 2.1, 3.1, 3.35, 4.65, 5.65, 5.75, 6.75, 6.85, 7.85, 8.85)/8.85
+#10.3, 11.3, 11.4, 12.4, 13.4)/13.4
+#            1  2  3   4    5     6     7     8     9    10    11    12    13     14    15    16   17    18
+#            M  M  M   M    M
+#                                       G     G     G    G     G     G     G    
+
+y.pos <- c(0, 1,   2, 2.05, 3.05, 3.9425, 5.05, 5.1, 6.1, 7.6)/7.6
+
+#, 8.6,  9.2075, 9.2575, 10.5575, 12.0575, 12.65, 12.7, 13.7, 15.2, 15.3)/15.3
+#            1  2    3  4     5      6       7     8   9     10  11     12      13       14      15       16       17  18    19    20   
+
+
+}
+
+
+#if (!(drug %in% c("PRED", "VCR", "LASP"))){
+#  x.pos <- c(0, 1, 2, 2.1, 3.1, 3.35, 4.65, 5.95, 4.65, 5.95, 6.05, 7.35,  8.65,  8.9, 9.9,    10, 11, 12)/12  
+ # y.pos <- c(0, 1,   2, 2.05, 3.05, 3.9425, 5.05, 5.1, 6.1, 7.6, 8.6,  9.2075, 9.2575, 10.5575, 12.0575, 12.65, 12.7, 13.7, 15.2, 15.3)/15.3
+#}
+
+par (mar=c(0,0,0,0), las=1)
+plot (0,0,type="n", axes=FALSE, xlab="", ylab="")
+
+
+#########################################
+#########END Figure Setup################
+#########################################
+#########################################
+#############Lower left panel############
+#########################################
+
+par(fig=c(x.pos[2], x.pos[5], y.pos[9],y.pos[10]), new=T)
+plot (0,0, type="n", xlab="", ylab="", axes=FALSE, ylim=c(-1,2))
+text (0,1.25, "MicroRNA", cex=2, xpd=TRUE)
+
+par(fig=c(x.pos[2], x.pos[3], y.pos[9],y.pos[10]), new=T)
+plot (0,0, type="n", xlab="", ylab="", axes=FALSE)
+sciNotation(p=xv.mir.clust.p, mytext1="SJCRH", mytext2="TOTXV")
+
+par(fig=c(x.pos[4], x.pos[5], y.pos[9],y.pos[10]), new=T)
+plot (0,0, type="n", xlab="", ylab="", axes=FALSE)
+sciNotation(p=xvi.mir.clust.p, mytext1="SJCRH", mytext2="TOTXVI")
+
+par(fig=c(x.pos[2], x.pos[3], y.pos[2],y.pos[7]), new=T)
+image(1:ncol(totxv.mirdata.heat.b), 1:nrow(totxv.mirdata.heat.b), t(totxv.mirdata.heat.b), xlim = 0.5 + c(0, ncol(totxv.mirdata.heat.b)), ylim = 0.5 + c(0, nrow(totxv.mirdata.heat.b)), xlab = "", ylab = "", axes = FALSE, col = bluered, breaks = totxv.mirdata.heat.b.breaks, frame.plot=TRUE)
+
+par(fig=c(x.pos[4], x.pos[5], y.pos[2],y.pos[7]), new=T)
+image(1:ncol(totxvi.mirdata.heat.b), 1:nrow(totxvi.mirdata.heat.b), t(totxvi.mirdata.heat.b), xlim = 0.5 + c(0, ncol(totxvi.mirdata.heat.b)), ylim = 0.5 + c(0, nrow(totxvi.mirdata.heat.b)), xlab = "", ylab = "", axes = FALSE, col = bluered, breaks = totxvi.mirdata.heat.b.breaks, frame.plot=TRUE)
+
+par(fig=c(x.pos[1], x.pos[2], y.pos[2],y.pos[7]), new=T)
+plot (totxv.mir.hc1, leaflab="none", axes=FALSE, yaxs="i", horiz=TRUE)#need to make combined ordering
+
+par(fig=c(x.pos[2], x.pos[3], y.pos[7],y.pos[8]), new=T)
+image(cbind(1:length(totxv.mir.col)), col = ifelse(totxv.mir.col ==1, "green", ifelse(totxv.mir.col == 3, "red", "gray"))[order.dendrogram(totxv.mir.hc2)], axes = FALSE)
+
+
+par(fig=c(x.pos[4], x.pos[5], y.pos[7],y.pos[8]), new=T)
+image(cbind(1:length(totxvi.mir.col)), col = ifelse(totxvi.mir.col ==1, "green", ifelse(totxvi.mir.col == 3, "red", "gray"))[order.dendrogram(totxvi.mir.hc2)], axes = FALSE)
+
+par(fig=c(x.pos[2], x.pos[3], y.pos[8],y.pos[9]), new=T)
+plot (totxv.mir.hc2, leaflab="none", axes=FALSE, xaxs="i")
+
+par(fig=c(x.pos[4], x.pos[5], y.pos[8],y.pos[9]), new=T)
+plot (totxvi.mir.hc2, leaflab="none", axes=FALSE, xaxs="i")
+
+par(fig=c(x.pos[2], x.pos[5], y.pos[2]-((x.pos[5]-x.pos[2])/10*18/13), y.pos[2]), new=T)
+plot (1,1, xlim=c(-10,10), ylim=c(-1,1), xaxs="i", yaxs="i", type="n", axes=FALSE)
+curve(-sqrt(1-(x-9)^2)+1, 9, 10, add=TRUE)
+curve(-sqrt(1-(x+9)^2)+1, -9, -10, add=TRUE)
+curve(sqrt(1-(x-1)^2)-1, 0, 1, add=TRUE)
+curve(sqrt(1-(x+1)^2)-1, -1, 0, add=TRUE)
+segments(-9,0,-1,0)
+segments(1,0,9,0)
+
+mir.meta.p <- pnorm((qnorm(xv.mir.clust.p/2) + qnorm(xvi.mir.clust.p/2))/sqrt(2))*2
+
+par(fig=c(x.pos[2], x.pos[5], y.pos[1],  y.pos[2]), new=T)
+plot (0,0, type="n", xlab="", ylab="", axes=FALSE)
+sciNotation(p=mir.meta.p, type="oneline")
+#########################################
+#########END Lower left panel############
+#########################################
+
+
+
+#########################################
+################Middle panel#############
+#########################################
+
+#par(fig=c(x.pos[7], x.pos[12], y.pos[17],y.pos[18]), new=T)
+#plot(0,0, type="n", xlab="", ylab="", axes=FALSE, ylim=c(-1,2))
+#text (0,1, ifelse (drug == "PRED", "Prednisolone", ifelse (drug == "VCR", "Vincristine", ifelse (drug == "LASP", "Asparaginase", ifelse (drug == "CYTU", "Cytarabine", ifelse (drug == "DEX", "Dexamethasone", ifelse (drug == "6MP","6-Mercaptopurine", ifelse (drug == "6TG", "6-Thioguanine", ""))))))), cex=3)
+
+par(fig=c(x.pos[7], x.pos[10], y.pos[9],y.pos[10]), new=T)
+plot (0,0, type="n", xlab="", ylab="", axes=FALSE, ylim=c(-1,2))
+text (0,1.25, "mRNA Expression", cex=2, xpd=TRUE)
+
+#if (drug %in% c("PRED", "VCR", "LASP")){
+ # par(fig=c(x.pos[11], x.pos[12], y.pos[9],y.pos[10]), new=T)
+ # plot (0,0, type="n", xlab="", ylab="", axes=FALSE)
+ # sciNotation(p=dutch.ge.clust.p, mytext2="Dutch")
+#}
+
+#if (drug %in% c("PRED", "VCR", "LASP")){
+ # par(fig=c(x.pos[11], x.pos[12], y.pos[8],y.pos[9]), new=T)
+ # plot (dutch.ge.pt.hc, leaflab="none", axes=FALSE, xaxs="i")
+#}
+par(fig=c(x.pos[7], x.pos[8], y.pos[9],y.pos[10]), new=T)
+#par(fig=c(x.pos[9], x.pos[10], y.pos[9],y.pos[10]), new=T)
+plot (0,0, type="n", xlab="", ylab="", axes=FALSE)
+sciNotation(p=xv.ge.clust.p, mytext1="SJCRH", mytext2="TOTXV")
+
+par(fig=c(x.pos[7], x.pos[8], y.pos[8],y.pos[9]), new=T)
+#par(fig=c(x.pos[9], x.pos[10], y.pos[8],y.pos[9]), new=T)
+plot (xv.ge.pt.hc, leaflab="none", axes=FALSE, xaxs="i")
+
+#par(fig=c(x.pos[11], x.pos[12], y.pos[9],y.pos[10]), new=T)
+par(fig=c(x.pos[9], x.pos[10], y.pos[9],y.pos[10]), new=T)
+plot (0,0, type="n", xlab="", ylab="", axes=FALSE)
+sciNotation(p=xvi.ge.clust.p, mytext1="SJCRH", mytext2="TOTXVI")
+par(fig=c(x.pos[9], x.pos[10], y.pos[8],y.pos[9]), new=T)
+#par(fig=c(x.pos[11], x.pos[12], y.pos[8],y.pos[9]), new=T)
+plot (xvi.ge.pt.hc, leaflab="none", axes=FALSE, xaxs="i")
+
+#if (drug %in% c("PRED", "VCR", "LASP")){
+ # par(fig=c(x.pos[11], x.pos[12], y.pos[7],y.pos[8]), new=T)
+ #par(fig=c(x.pos[7], x.pos[8], y.pos[7],y.pos[8]), new=T)
+ # image(cbind(1:length(dutch.ge.col)), col = ifelse(dutch.ge.col ==1, "green", ifelse(dutch.ge.col == 3, "red", "gray"))[order.dendrogram(dutch.ge.pt.hc)], axes = FALSE)
+#}
+
+par(fig=c(x.pos[7], x.pos[8], y.pos[7],y.pos[8]), new=T)
+image(cbind(1:length(xv.ge.col)), col = ifelse(xv.ge.col ==1, "green", ifelse(xv.ge.col == 3, "red", "gray"))[order.dendrogram(xv.ge.pt.hc)], axes = FALSE)
+
+par(fig=c(x.pos[9], x.pos[10], y.pos[7],y.pos[8]), new=T)
+image(cbind(1:length(xvi.ge.col)), col = ifelse(xvi.ge.col ==1, "green", ifelse(xvi.ge.col == 3, "red", "gray"))[order.dendrogram(xvi.ge.pt.hc)], axes = FALSE)
+
+#if (drug %in% c("PRED", "VCR", "LASP")){
+#par(fig=c(x.pos[11], x.pos[12], y.pos[2],y.pos[7]), new=T)
+#image(1:ncol(dutch.ge.data), 1:nrow(dutch.ge.data), t(dutch.ge.data), xlim = 0.5 + c(0, ncol(dutch.ge.data)), ylim = 0.5 + c(0, nrow(dutch.ge.data)), xlab = "", ylab = "", axes = FALSE, col = bluered, breaks = dutch.ge.breaks, frame.plot=TRUE)
+#}
+
+par(fig=c(x.pos[7], x.pos[8], y.pos[2],y.pos[7]), new=T)
+image(1:ncol(xv.ge.data), 1:nrow(xv.ge.data), t(xv.ge.data), xlim = 0.5 + c(0, ncol(xv.ge.data)), ylim = 0.5 + c(0, nrow(xv.ge.data)), xlab = "", ylab = "", axes = FALSE, col = bluered, breaks = xv.ge.breaks, frame.plot=TRUE)
+
+par(fig=c(x.pos[9], x.pos[10], y.pos[2],y.pos[7]), new=T)
+image(1:ncol(xvi.ge.data), 1:nrow(xvi.ge.data), t(xvi.ge.data), xlim = 0.5 + c(0, ncol(xvi.ge.data)), ylim = 0.5 + c(0, nrow(xvi.ge.data)), xlab = "", ylab = "", axes = FALSE, col = bluered, breaks = xvi.ge.breaks, frame.plot=TRUE)
+
+par(fig=c(x.pos[10], x.pos[12], y.pos[2],y.pos[7]), new=T)
+plot (all.ge.hc2, leaflab="none", axes=FALSE, yaxs="i", horiz=TRUE, xlim=c(0,attributes(all.ge.hc2)$height))
+
+#TODO(spaugh): Watch ratio change here for final output dimensions
+par(fig=c(x.pos[7], x.pos[10], y.pos[2]-((x.pos[5]-x.pos[2])/10*18/13), y.pos[2]), new=T)
+plot (1,1, xlim=c(-10,10), ylim=c(-1,1), xaxs="i", yaxs="i", type="n", axes=FALSE)
+curve(-sqrt(1-(x-9)^2)+1, 9, 10, add=TRUE)
+curve(-sqrt(1-(x+9)^2)+1, -9, -10, add=TRUE)
+curve(sqrt(1-(x-1)^2)-1, 0, 1, add=TRUE)
+curve(sqrt(1-(x+1)^2)-1, -1, 0, add=TRUE)
+segments(-9,0,-1,0)
+segments(1,0,9,0)
+
+#if (drug %in% c("PRED", "VCR", "LASP")){
+#  ge.meta.p <- pnorm((qnorm(xv.ge.clust.p/2) + qnorm(xvi.ge.clust.p/2)+qnorm(dutch.ge.clust.p/2))/sqrt(3))*2
+#}
+
+#if (!(drug %in% c("PRED", "VCR", "LASP"))){
+  ge.meta.p <- pnorm((qnorm(xv.ge.clust.p/2) + qnorm(xvi.ge.clust.p/2))/sqrt(2))*2
+#}
+
+par(fig=c(x.pos[7], x.pos[10], y.pos[1], y.pos[2]), new=T)
+plot (0,0, type="n", xlab="", ylab="", axes=FALSE)
+
+#if (drug %in% c("PRED", "VCR", "LASP")){
+#  sciNotation(p=ge.meta.p, type="oneline")
+#}
+
+#if (!(drug %in% c("PRED", "VCR", "LASP"))){
+  sciNotation(p=ge.meta.p, type="oneline")
+#}
+
+#########################################
+#############END Middle panel############
+#########################################
+
+
+#########################################
+####START lower left connections ########
+#########################################
+
+par(fig=c(x.pos[5],x.pos[7],y.pos[2],y.pos[7]), new=T)
+ 
+unitsize <- nrow(totxv.mirdata.heat.b)/(y.pos[7]-y.pos[2])
+unitsize
+
+boxsize <- y.pos[7]-y.pos[2]
+boxsize
+
+lowerlimit <- 0.5
+lowerlimit
+
+upperlimit <- unitsize*boxsize+0.5
+upperlimit
+
+geunitsize <- (y.pos[7]-y.pos[2])/nrow(xv.ge.data)
+
+offset <- 0 #unitsize*((y.pos[12]-y.pos[2])-(y.pos[12]-y.pos[6]))
+offset
+
+multi.unit <- (upperlimit-lowerlimit)/(boxsize/geunitsize)
+multi.unit
+
+plot(0,0, xlim=c(0,1), ylim=c(lowerlimit, upperlimit), axes=FALSE, xaxs="i", yaxs="i", type="n")
+
+for (i in 1:nrow(mir.connect)){
+   lines (c(0,1), c(mir.connect[i,"mirorder"]+offset,(mir.connect[i,"georder"]-0.5)*multi.unit+lowerlimit), col=rgb(0,0,1,0.75))
+}
+
+
+#########################################
+####END lower left connections ##########
+#########################################
+
+@
+
+
+<<methgefig, fig=TRUE, width=18, height=9, include=FALSE>>=
+
+
+#########################################
+#############Figure Setup################
+#########################################
+
+
+bluered <- c("#0000FF", "#0D0DFF", "#1B1BFF", "#2828FF", "#3636FF", "#4343FF", 
+"#5151FF", "#5E5EFF", "#6B6BFF", "#7979FF", "#8686FF", "#9494FF", 
+"#A1A1FF", "#AEAEFF", "#BCBCFF", "#C9C9FF", "#D7D7FF", "#E4E4FF", 
+"#F2F2FF", "#FFFFFF", "#FFFFFF", "#FFF2F2", "#FFE4E4", "#FFD7D7", 
+"#FFC9C9", "#FFBCBC", "#FFAEAE", "#FFA1A1", "#FF9494", "#FF8686", 
+"#FF7979", "#FF6B6B", "#FF5E5E", "#FF5151", "#FF4343", "#FF3636", 
+"#FF2828", "#FF1B1B", "#FF0D0D", "#FF0000")
+
+
+
+#if (drug %in% c("PRED", "VCR", "LASP")){
+ x.pos <- c(0, 1, 2, 2.1, 3.1, 3.35, 4.65, 5.95, 6.05, 7.35, 7.45, 8.75, 10.05)/10.05
+ x.pos <- c(0, 1, 2, 2.1, 3.1, 3.35, 4.65, 5.65, 5.75, 6.75, 6.85, 7.85, 8.85)/8.85
+#10.3, 11.3, 11.4, 12.4, 13.4)/13.4
+#            1  2  3   4    5     6     7     8     9    10    11    12    13     14    15    16   17    18
+#            M  M  M   M    M
+#                                       G     G     G    G     G     G     G    
+
+ # y.pos <- c(0, 1,   2, 2.05, 3.05, 3.9425, 5.05, 5.1, 6.1, 7.6)/7.6
+
+#, 8.6,  9.2075, 9.2575, 10.5575, 12.0575, 12.65, 12.7, 13.7, 15.2, 15.3)/15.3
+#            1  2    3  4     5      6       7     8   9     10  11     12      13       14      15       16       17  18    19    20   
+
+
+#}
+
+
+#if (!(drug %in% c("PRED", "VCR", "LASP"))){
+#  x.pos <- c(0, 1, 2, 2.1, 3.1, 3.35, 4.65, 5.95, 4.65, 5.95, 6.05, 7.35,  8.65,  8.9, 9.9,    10, 11, 12)/12  
+ # y.pos <- c(0, 1,   2, 2.05, 3.05, 3.9425, 5.05, 5.1, 6.1, 7.6, 8.6,  9.2075, 9.2575, 10.5575, 12.0575, 12.65, 12.7, 13.7, 15.2, 15.3)/15.3
+#}
+
+par (mar=c(0,0,0,0), las=1)
+plot (0,0,type="n", axes=FALSE, xlab="", ylab="")
+
+
+#########################################
+#########END Figure Setup################
+#########################################
+#########################################
+#############Lower left panel############
+#########################################
+
+par(fig=c(x.pos[2], x.pos[5], y.pos[9],y.pos[10]), new=T)
+plot (0,0, type="n", xlab="", ylab="", axes=FALSE, ylim=c(-1,2))
+text (0,1.25, "DNA methylation", cex=2, xpd=TRUE)
+
+par(fig=c(x.pos[2], x.pos[3], y.pos[9],y.pos[10]), new=T)
+plot (0,0, type="n", xlab="", ylab="", axes=FALSE)
+sciNotation(p=totxv.meth.clust.p, mytext1="SJCRH", mytext2="TOTXV")
+
+par(fig=c(x.pos[4], x.pos[5], y.pos[9],y.pos[10]), new=T)
+plot (0,0, type="n", xlab="", ylab="", axes=FALSE)
+sciNotation(p=totxvi.meth.clust.p, mytext1="SJCRH", mytext2="TOTXVI")
+
+par(fig=c(x.pos[2], x.pos[3], y.pos[2],y.pos[7]), new=T)
+image(1:ncol(totxv.b.meth.data.heat), 1:nrow(totxv.b.meth.data.heat), as.matrix(t(totxv.b.meth.data.heat)), xlim = 0.5 + c(0, ncol(totxv.b.meth.data.heat)), ylim = 0.5 + c(0, nrow(totxv.b.meth.data.heat)), xlab="", ylab="", axes=FALSE, col=bluered, frame.plot=TRUE)
+
+par(fig=c(x.pos[4], x.pos[5], y.pos[2],y.pos[7]), new=T)
+image(1:ncol(totxvi.b.meth.data.heat), 1:nrow(totxvi.b.meth.data.heat), as.matrix(t(totxvi.b.meth.data.heat)), xlim = 0.5 + c(0, ncol(totxvi.b.meth.data.heat)), ylim = 0.5 + c(0, nrow(totxvi.b.meth.data.heat)), xlab="", ylab="", axes=FALSE, col=bluered, frame.plot=TRUE)
+
+par(fig=c(x.pos[1], x.pos[2], y.pos[2],y.pos[7]), new=T)
+plot (totxv.meth.hc1, leaflab="none", axes=FALSE, yaxs="i", horiz=TRUE)#need to make combined ordering
+
+par(fig=c(x.pos[2], x.pos[3], y.pos[7],y.pos[8]), new=T)
+image(cbind(1:length(totxv.meth.phenotype.b)), col = ifelse(totxv.meth.phenotype.b ==1, "green", ifelse(totxv.meth.phenotype.b == 3, "red", "gray"))[order.dendrogram(totxv.meth.hc2)], axes = FALSE)
+
+par(fig=c(x.pos[4], x.pos[5], y.pos[7],y.pos[8]), new=T)
+image(cbind(1:length(totxvi.meth.phenotype.b)), col = ifelse(totxvi.meth.phenotype.b ==1, "green", ifelse(totxvi.meth.phenotype.b == 3, "red", "gray"))[order.dendrogram(totxvi.meth.hc2)], axes = FALSE)
+
+par(fig=c(x.pos[2], x.pos[3], y.pos[8],y.pos[9]), new=T)
+plot (totxv.meth.hc2, leaflab="none", axes=FALSE, xaxs="i")
+
+par(fig=c(x.pos[4], x.pos[5], y.pos[8],y.pos[9]), new=T)
+plot (totxvi.meth.hc2, leaflab="none", axes=FALSE, xaxs="i")
+
+par(fig=c(x.pos[2], x.pos[5], y.pos[2]-((x.pos[5]-x.pos[2])/10*18/13), y.pos[2]), new=T)
+plot (1,1, xlim=c(-10,10), ylim=c(-1,1), xaxs="i", yaxs="i", type="n", axes=FALSE)
+curve(-sqrt(1-(x-9)^2)+1, 9, 10, add=TRUE)
+curve(-sqrt(1-(x+9)^2)+1, -9, -10, add=TRUE)
+curve(sqrt(1-(x-1)^2)-1, 0, 1, add=TRUE)
+curve(sqrt(1-(x+1)^2)-1, -1, 0, add=TRUE)
+segments(-9,0,-1,0)
+segments(1,0,9,0)
+
+meth.meta.p <- pnorm((qnorm(totxv.meth.clust.p/2) + qnorm(totxvi.meth.clust.p/2))/sqrt(2))*2
+
+par(fig=c(x.pos[2], x.pos[5], y.pos[1],  y.pos[2]), new=T)
+plot (0,0, type="n", xlab="", ylab="", axes=FALSE)
+sciNotation(p=meth.meta.p, type="oneline")
+
+#########################################
+#########END Lower left panel############
+#########################################
+
+
+
+#########################################
+################Middle panel#############
+#########################################
+
+#par(fig=c(x.pos[7], x.pos[12], y.pos[17],y.pos[18]), new=T)
+#plot(0,0, type="n", xlab="", ylab="", axes=FALSE, ylim=c(-1,2))
+#text (0,1, ifelse (drug == "PRED", "Prednisolone", ifelse (drug == "VCR", "Vincristine", ifelse (drug == "LASP", "Asparaginase", ifelse (drug == "CYTU", "Cytarabine", ifelse (drug == "DEX", "Dexamethasone", ifelse (drug == "6MP","6-Mercaptopurine", ifelse (drug == "6TG", "6-Thioguanine", ""))))))), cex=3)
+
+par(fig=c(x.pos[7], x.pos[10], y.pos[9],y.pos[10]), new=T)
+plot (0,0, type="n", xlab="", ylab="", axes=FALSE, ylim=c(-1,2))
+text (0,1.25, "mRNA Expression", cex=2, xpd=TRUE)
+
+#if (drug %in% c("PRED", "VCR", "LASP")){
+  #par(fig=c(x.pos[7], x.pos[8], y.pos[9],y.pos[10]), new=T)
+ # plot (0,0, type="n", xlab="", ylab="", axes=FALSE)
+ # sciNotation(p=dutch.ge.clust.p, mytext2="Dutch")
+#}
+
+#if (drug %in% c("PRED", "VCR", "LASP")){
+  #par(fig=c(x.pos[7], x.pos[8], y.pos[8],y.pos[9]), new=T)
+ # plot (dutch.ge.pt.hc, leaflab="none", axes=FALSE, xaxs="i")
+#}
+
+par(fig=c(x.pos[7], x.pos[8], y.pos[9],y.pos[10]), new=T)
+plot (0,0, type="n", xlab="", ylab="", axes=FALSE)
+sciNotation(p=xv.ge.clust.p, mytext1="SJCRH", mytext2="TOTXV")
+
+par(fig=c(x.pos[7], x.pos[8], y.pos[8],y.pos[9]), new=T)
+plot (xv.ge.pt.hc, leaflab="none", axes=FALSE, xaxs="i")
+
+par(fig=c(x.pos[9], x.pos[10], y.pos[9],y.pos[10]), new=T)
+plot (0,0, type="n", xlab="", ylab="", axes=FALSE)
+sciNotation(p=xvi.ge.clust.p, mytext1="SJCRH", mytext2="TOTXVI")
+
+par(fig=c(x.pos[9], x.pos[10], y.pos[8],y.pos[9]), new=T)
+plot (xvi.ge.pt.hc, leaflab="none", axes=FALSE, xaxs="i")
+
+#if (drug %in% c("PRED", "VCR", "LASP")){
+#  par(fig=c(x.pos[7], x.pos[8], y.pos[7],y.pos[8]), new=T)
+  #image(cbind(1:length(dutch.ge.col)), col = ifelse(dutch.ge.col ==1, "green", ifelse(dutch.ge.col == 3, "red", "gray"))[order.dendrogram(dutch.ge.pt.hc)], axes = FALSE)
+#}
+
+par(fig=c(x.pos[7], x.pos[8], y.pos[7],y.pos[8]), new=T)
+image(cbind(1:length(xv.ge.col)), col = ifelse(xv.ge.col ==1, "green", ifelse(xv.ge.col == 3, "red", "gray"))[order.dendrogram(xv.ge.pt.hc)], axes = FALSE)
+
+par(fig=c(x.pos[9], x.pos[10], y.pos[7],y.pos[8]), new=T)
+image(cbind(1:length(xvi.ge.col)), col = ifelse(xvi.ge.col ==1, "green", ifelse(xvi.ge.col == 3, "red", "gray"))[order.dendrogram(xvi.ge.pt.hc)], axes = FALSE)
+
+#if (drug %in% c("PRED", "VCR", "LASP")){
+#par(fig=c(x.pos[7], x.pos[8], y.pos[2],y.pos[7]), new=T)
+#image(1:ncol(dutch.ge.data), 1:nrow(dutch.ge.data), t(dutch.ge.data), xlim = 0.5 + c(0, ncol(dutch.ge.data)), ylim = 0.5 + c(0, nrow(dutch.ge.data)), xlab = "", ylab = "", axes = FALSE, col = bluered, breaks = dutch.ge.breaks, frame.plot=TRUE)
+#}
+
+par(fig=c(x.pos[7], x.pos[8], y.pos[2],y.pos[7]), new=T)
+image(1:ncol(xv.ge.data), 1:nrow(xv.ge.data), t(xv.ge.data), xlim = 0.5 + c(0, ncol(xv.ge.data)), ylim = 0.5 + c(0, nrow(xv.ge.data)), xlab = "", ylab = "", axes = FALSE, col = bluered, breaks = xv.ge.breaks, frame.plot=TRUE)
+
+par(fig=c(x.pos[9], x.pos[10], y.pos[2],y.pos[7]), new=T)
+image(1:ncol(xvi.ge.data), 1:nrow(xvi.ge.data), t(xvi.ge.data), xlim = 0.5 + c(0, ncol(xvi.ge.data)), ylim = 0.5 + c(0, nrow(xvi.ge.data)), xlab = "", ylab = "", axes = FALSE, col = bluered, breaks = xvi.ge.breaks, frame.plot=TRUE)
+
+par(fig=c(x.pos[10], x.pos[12], y.pos[2],y.pos[7]), new=T)
+plot (all.ge.hc2, leaflab="none", axes=FALSE, yaxs="i", horiz=TRUE, xlim=c(0,attributes(all.ge.hc2)$height))
+
+#TODO(spaugh): Watch ratio change here for final output dimensions
+par(fig=c(x.pos[7], x.pos[10], y.pos[2]-((x.pos[5]-x.pos[2])/10*18/13), y.pos[2]), new=T)
+plot (1,1, xlim=c(-10,10), ylim=c(-1,1), xaxs="i", yaxs="i", type="n", axes=FALSE)
+curve(-sqrt(1-(x-9)^2)+1, 9, 10, add=TRUE)
+curve(-sqrt(1-(x+9)^2)+1, -9, -10, add=TRUE)
+curve(sqrt(1-(x-1)^2)-1, 0, 1, add=TRUE)
+curve(sqrt(1-(x+1)^2)-1, -1, 0, add=TRUE)
+segments(-9,0,-1,0)
+segments(1,0,9,0)
+
+#if (drug %in% c("PRED", "VCR", "LASP")){
+ # ge.meta.p <- pnorm((qnorm(xv.ge.clust.p/2) + qnorm(xvi.ge.clust.p/2)+qnorm(dutch.ge.clust.p/2))/sqrt(3))*2
+#}
+
+#if (!(drug %in% c("PRED", "VCR", "LASP"))){
+  ge.meta.p <- pnorm((qnorm(xv.ge.clust.p/2) + qnorm(xvi.ge.clust.p/2))/sqrt(2))*2
+#}
+
+par(fig=c(x.pos[7], x.pos[10], y.pos[1], y.pos[2]), new=T)
+plot (0,0, type="n", xlab="", ylab="", axes=FALSE)
+
+#if (drug %in% c("PRED", "VCR", "LASP")){
+#  sciNotation(p=ge.meta.p, type="oneline")
+#}
+
+#if (!(drug %in% c("PRED", "VCR", "LASP"))){
+  sciNotation(p=ge.meta.p, type="oneline")
+#}
+
+#########################################
+#############END Middle panel############
+#########################################
+
+
+#########################################
+####START lower left connections ########
+#########################################
+
+par(fig=c(x.pos[5],x.pos[7],y.pos[2],y.pos[7]), new=T)
+ 
+unitsize <- nrow(totxv.b.meth.data.heat)/(y.pos[7]-y.pos[2])
+unitsize
+
+boxsize <- y.pos[7]-y.pos[2]
+boxsize
+
+lowerlimit <- 0.5
+lowerlimit
+
+upperlimit <- unitsize*boxsize+0.5
+upperlimit
+
+geunitsize <- (y.pos[7]-y.pos[2])/nrow(xv.ge.data)
+
+offset <- 0 #unitsize*((y.pos[12]-y.pos[2])-(y.pos[12]-y.pos[6]))
+offset
+
+multi.unit <- (upperlimit-lowerlimit)/(boxsize/geunitsize)
+multi.unit
+
+plot(0,0, xlim=c(0,1), ylim=c(lowerlimit, upperlimit), axes=FALSE, xaxs="i", yaxs="i", type="n")
+for (i in 1:nrow(methge)){
+   lines (c(1,0), c(methge[i,"methorder"]+offset,(methge[i,"georder"]-0.5)*multi.unit+lowerlimit), col=rgb(1,0,0,0.75))
+}
+
+
+#########################################
+####END lower left connections ##########
+#########################################
+
+@
+
+
+<<cngefig, fig=TRUE, width=18, height=9, include=FALSE>>=
+
+
+#########################################
+#############Figure Setup################
+#########################################
+
+
+bluered <- c("#0000FF", "#0D0DFF", "#1B1BFF", "#2828FF", "#3636FF", "#4343FF", 
+"#5151FF", "#5E5EFF", "#6B6BFF", "#7979FF", "#8686FF", "#9494FF", 
+"#A1A1FF", "#AEAEFF", "#BCBCFF", "#C9C9FF", "#D7D7FF", "#E4E4FF", 
+"#F2F2FF", "#FFFFFF", "#FFFFFF", "#FFF2F2", "#FFE4E4", "#FFD7D7", 
+"#FFC9C9", "#FFBCBC", "#FFAEAE", "#FFA1A1", "#FF9494", "#FF8686", 
+"#FF7979", "#FF6B6B", "#FF5E5E", "#FF5151", "#FF4343", "#FF3636", 
+"#FF2828", "#FF1B1B", "#FF0D0D", "#FF0000")
+
+
+
+if (drug %in% c("PRED", "VCR", "LASP")){
+  x.pos <- c(0, 1, 2, 2.1, 3.1, 3.35, 4.65, 5.95, 6.05, 7.35, 7.45, 8.75, 10.05)/10.05
+ x.pos <- c(0, 1, 2, 2.1, 3.1, 3.35, 4.65, 5.65, 5.75, 6.75, 6.85, 7.85, 8.85)/8.85
+#10.3, 11.3, 11.4, 12.4, 13.4)/13.4
+#            1  2  3   4    5     6     7     8     9    10    11    12    13     14    15    16   17    18
+#            M  M  M   M    M
+#                                       G     G     G    G     G     G     G    
+
+y.pos <- c(0, 1,   2, 2.05, 3.05, 3.9425, 5.05, 5.1, 6.1, 7.6)/7.6
+
+#, 8.6,  9.2075, 9.2575, 10.5575, 12.0575, 12.65, 12.7, 13.7, 15.2, 15.3)/15.3
+#            1  2    3  4     5      6       7     8   9     10  11     12      13       14      15       16       17  18    19    20   
+
+
+}
+
+
+#if (!(drug %in% c("PRED", "VCR", "LASP"))){
+#  x.pos <- c(0, 1, 2, 2.1, 3.1, 3.35, 4.65, 5.95, 4.65, 5.95, 6.05, 7.35,  8.65,  8.9, 9.9,    10, 11, 12)/12  
+ # y.pos <- c(0, 1,   2, 2.05, 3.05, 3.9425, 5.05, 5.1, 6.1, 7.6, 8.6,  9.2075, 9.2575, 10.5575, 12.0575, 12.65, 12.7, 13.7, 15.2, 15.3)/15.3
+#}
+
+par (mar=c(0,0,0,0), las=1)
+plot (0,0,type="n", axes=FALSE, xlab="", ylab="")
+
+
+#########################################
+#########END Figure Setup################
+#########################################
+#########################################
+#############Lower left panel############
+#########################################
+
+par(fig=c(x.pos[2], x.pos[5], y.pos[9],y.pos[10]), new=T)
+plot (0,0, type="n", xlab="", ylab="", axes=FALSE, ylim=c(-1,2))
+text (0,1.25, "CNVs", cex=2, xpd=TRUE)
+
+par(fig=c(x.pos[2], x.pos[3], y.pos[9],y.pos[10]), new=T)
+plot (0,0, type="n", xlab="", ylab="", axes=FALSE)
+sciNotation(p=totxv.cn.clust.p, mytext1="SJCRH", mytext2="TOTXV")
+
+par(fig=c(x.pos[4], x.pos[5], y.pos[9],y.pos[10]), new=T)
+plot (0,0, type="n", xlab="", ylab="", axes=FALSE)
+sciNotation(p=totxvi.cn.clust.p, mytext1="SJCRH", mytext2="TOTXVI")
+
+par(fig=c(x.pos[2], x.pos[3], y.pos[2],y.pos[7]), new=T)
+image(1:ncol(totxv.cn.data), 1:nrow(totxv.cn.data), t(totxv.cn.data), xlim = 0.5 + c(0, ncol(totxv.cn.data)), ylim = 0.5 + c(0, nrow(totxv.cn.data)), xlab = "", ylab = "", axes = FALSE, col=c(rgb(0,0,1,1), rgb(0,0,1,0.5), rgb(255,191,0, maxColorValue=255), rgb(1,0,0,0.5), rgb(1,0,0,1)), breaks=c(-1,0.5,1.5,2.5,3.5,4.5), frame.plot=TRUE)
+
+par(fig=c(x.pos[4], x.pos[5], y.pos[2],y.pos[7]), new=T)
+image(1:ncol(totxvi.cn.data), 1:nrow(totxvi.cn.data), t(totxvi.cn.data), xlim = 0.5 + c(0, ncol(totxvi.cn.data)), ylim = 0.5 + c(0, nrow(totxvi.cn.data)), xlab = "", ylab = "", axes = FALSE, col=c(rgb(0,0,1,1), rgb(0,0,1,0.5),  rgb(255,191,0, maxColorValue=255), rgb(1,0,0,0.5), rgb(1,0,0,1)), breaks=c(-1,0.5,1.5,2.5,3.5,4.5), frame.plot=TRUE)
+
+par(fig=c(x.pos[1], x.pos[2], y.pos[2],y.pos[7]), new=T)
+plot (totxv.cn.hc1, leaflab="none", axes=FALSE, yaxs="i", horiz=TRUE)#need to make combined ordering
+
+par(fig=c(x.pos[2], x.pos[3], y.pos[7],y.pos[8]), new=T)
+image(cbind(1:length(totxv.cn.phenotype.b)), col = ifelse(totxv.cn.phenotype.b ==1, "green", ifelse(totxv.cn.phenotype.b == 3, "red", "gray"))[order.dendrogram(totxv.cn.hc2)], axes = FALSE)
+
+par(fig=c(x.pos[4], x.pos[5], y.pos[7],y.pos[8]), new=T)
+image(cbind(1:length(totxv.cn.phenotype.b)), col = ifelse(totxv.cn.phenotype.b ==1, "green", ifelse(totxv.cn.phenotype.b == 3, "red", "gray"))[order.dendrogram(totxv.cn.hc2)], axes = FALSE, frame.plot=TRUE)
+
+par(fig=c(x.pos[2], x.pos[3], y.pos[8],y.pos[9]), new=T)
+plot (totxv.cn.hc2, leaflab="none", axes=FALSE, xaxs="i")
+
+par(fig=c(x.pos[4], x.pos[5], y.pos[8],y.pos[9]), new=T)
+plot (totxvi.cn.hc2, leaflab="none", axes=FALSE, xaxs="i")
+
+par(fig=c(x.pos[2], x.pos[5], y.pos[2]-((x.pos[5]-x.pos[2])/10*18/13), y.pos[2]), new=T)
+plot (1,1, xlim=c(-10,10), ylim=c(-1,1), xaxs="i", yaxs="i", type="n", axes=FALSE)
+curve(-sqrt(1-(x-9)^2)+1, 9, 10, add=TRUE)
+curve(-sqrt(1-(x+9)^2)+1, -9, -10, add=TRUE)
+curve(sqrt(1-(x-1)^2)-1, 0, 1, add=TRUE)
+curve(sqrt(1-(x+1)^2)-1, -1, 0, add=TRUE)
+segments(-9,0,-1,0)
+segments(1,0,9,0)
+
+cn.meta.p <- pnorm((qnorm((totxv.cn.clust.p)/2) + qnorm(totxvi.cn.clust.p/2))/sqrt(2))*2
+
+par(fig=c(x.pos[2], x.pos[5], y.pos[1],  y.pos[2]), new=T)
+plot (0,0, type="n", xlab="", ylab="", axes=FALSE)
+sciNotation(p=cn.meta.p, type="oneline")
+
+#########################################
+#########END Lower left panel############
+#########################################
+
+
+
+#########################################
+################Middle panel#############
+#########################################
+
+#par(fig=c(x.pos[7], x.pos[12], y.pos[17],y.pos[18]), new=T)
+#plot(0,0, type="n", xlab="", ylab="", axes=FALSE, ylim=c(-1,2))
+#text (0,1, ifelse (drug == "PRED", "Prednisolone", ifelse (drug == "VCR", "Vincristine", ifelse (drug == "LASP", "Asparaginase", ifelse (drug == "CYTU", "Cytarabine", ifelse (drug == "DEX", "Dexamethasone", ifelse (drug == "6MP","6-Mercaptopurine", ifelse (drug == "6TG", "6-Thioguanine", ""))))))), cex=3)
+
+par(fig=c(x.pos[7], x.pos[10], y.pos[9],y.pos[10]), new=T)
+plot (0,0, type="n", xlab="", ylab="", axes=FALSE, ylim=c(-1,2))
+text (0,1.25, "mRNA Expression", cex=2, xpd=TRUE)
+
+#if (drug %in% c("PRED", "VCR", "LASP")){
+ # par(fig=c(x.pos[7], x.pos[8], y.pos[9],y.pos[10]), new=T)
+ # plot (0,0, type="n", xlab="", ylab="", axes=FALSE)
+ # sciNotation(p=dutch.ge.clust.p, mytext2="Dutch")
+#}
+
+#if (drug %in% c("PRED", "VCR", "LASP")){
+#  par(fig=c(x.pos[7], x.pos[8], y.pos[8],y.pos[9]), new=T)
+ # plot (dutch.ge.pt.hc, leaflab="none", axes=FALSE, xaxs="i")
+#}
+
+par(fig=c(x.pos[7], x.pos[8], y.pos[9],y.pos[10]), new=T)
+plot (0,0, type="n", xlab="", ylab="", axes=FALSE)
+sciNotation(p=xv.ge.clust.p, mytext1="SJCRH", mytext2="TOTXV")
+
+par(fig=c(x.pos[7], x.pos[8], y.pos[8],y.pos[9]), new=T)
+plot (xv.ge.pt.hc, leaflab="none", axes=FALSE, xaxs="i")
+
+par(fig=c(x.pos[9], x.pos[10], y.pos[9],y.pos[10]), new=T)
+plot (0,0, type="n", xlab="", ylab="", axes=FALSE)
+sciNotation(p=xvi.ge.clust.p, mytext1="SJCRH", mytext2="TOTXVI")
+
+par(fig=c(x.pos[9], x.pos[10], y.pos[8],y.pos[9]), new=T)
+plot (xvi.ge.pt.hc, leaflab="none", axes=FALSE, xaxs="i")
+
+#if (drug %in% c("PRED", "VCR", "LASP")){
+ # par(fig=c(x.pos[7], x.pos[8], y.pos[7],y.pos[8]), new=T)
+ # image(cbind(1:length(dutch.ge.col)), col = ifelse(dutch.ge.col ==1, "green", ifelse(dutch.ge.col == 3, "red", "gray"))[order.dendrogram(dutch.ge.pt.hc)], axes = FALSE)
+#}
+
+par(fig=c(x.pos[7], x.pos[8], y.pos[7],y.pos[8]), new=T)
+image(cbind(1:length(xv.ge.col)), col = ifelse(xv.ge.col ==1, "green", ifelse(xv.ge.col == 3, "red", "gray"))[order.dendrogram(xv.ge.pt.hc)], axes = FALSE)
+
+par(fig=c(x.pos[9], x.pos[10], y.pos[7],y.pos[8]), new=T)
+image(cbind(1:length(xvi.ge.col)), col = ifelse(xvi.ge.col ==1, "green", ifelse(xvi.ge.col == 3, "red", "gray"))[order.dendrogram(xvi.ge.pt.hc)], axes = FALSE)
+
+#if (drug %in% c("PRED", "VCR", "LASP")){
+#par(fig=c(x.pos[7], x.pos[8], y.pos[2],y.pos[7]), new=T)
+#image(1:ncol(dutch.ge.data), 1:nrow(dutch.ge.data), t(dutch.ge.data), xlim = 0.5 + c(0, ncol(dutch.ge.data)), ylim = 0.5 + c(0, nrow(dutch.ge.data)), xlab = "", ylab = "", axes = FALSE, col = bluered, breaks = dutch.ge.breaks, frame.plot=TRUE)
+#}
+
+par(fig=c(x.pos[7], x.pos[8], y.pos[2],y.pos[7]), new=T)
+image(1:ncol(xv.ge.data), 1:nrow(xv.ge.data), t(xv.ge.data), xlim = 0.5 + c(0, ncol(xv.ge.data)), ylim = 0.5 + c(0, nrow(xv.ge.data)), xlab = "", ylab = "", axes = FALSE, col = bluered, breaks = xv.ge.breaks, frame.plot=TRUE)
+
+par(fig=c(x.pos[9], x.pos[10], y.pos[2],y.pos[7]), new=T)
+image(1:ncol(xvi.ge.data), 1:nrow(xvi.ge.data), t(xvi.ge.data), xlim = 0.5 + c(0, ncol(xvi.ge.data)), ylim = 0.5 + c(0, nrow(xvi.ge.data)), xlab = "", ylab = "", axes = FALSE, col = bluered, breaks = xvi.ge.breaks, frame.plot=TRUE)
+
+par(fig=c(x.pos[10], x.pos[12], y.pos[2],y.pos[7]), new=T)
+plot (all.ge.hc2,  axes=FALSE, yaxs="i", horiz=TRUE, xlim=c(0,attributes(all.ge.hc2)$height))
+
+#TODO(spaugh): Watch ratio change here for final output dimensions
+par(fig=c(x.pos[7], x.pos[10], y.pos[2]-((x.pos[5]-x.pos[2])/10*18/13), y.pos[2]), new=T)
+plot (1,1, xlim=c(-10,10), ylim=c(-1,1), xaxs="i", yaxs="i", type="n", axes=FALSE)
+curve(-sqrt(1-(x-9)^2)+1, 9, 10, add=TRUE)
+curve(-sqrt(1-(x+9)^2)+1, -9, -10, add=TRUE)
+curve(sqrt(1-(x-1)^2)-1, 0, 1, add=TRUE)
+curve(sqrt(1-(x+1)^2)-1, -1, 0, add=TRUE)
+segments(-9,0,-1,0)
+segments(1,0,9,0)
+
+#if (drug %in% c("PRED", "VCR", "LASP")){
+ # ge.meta.p <- pnorm((qnorm(xv.ge.clust.p/2) + qnorm(xvi.ge.clust.p/2)+qnorm(dutch.ge.clust.p/2))/sqrt(3))*2
+#}
+
+#if (!(drug %in% c("PRED", "VCR", "LASP"))){
+  ge.meta.p <- pnorm((qnorm(xv.ge.clust.p/2) + qnorm(xvi.ge.clust.p/2))/sqrt(2))*2
+#}
+
+par(fig=c(x.pos[7], x.pos[10], y.pos[1], y.pos[2]), new=T)
+plot (0,0, type="n", xlab="", ylab="", axes=FALSE)
+
+#if (drug %in% c("PRED", "VCR", "LASP")){
+ # sciNotation(p=ge.meta.p, type="oneline")
+#}
+
+#if (!(drug %in% c("PRED", "VCR", "LASP"))){
+  sciNotation(p=ge.meta.p, type="oneline")
+#}
+
+#########################################
+#############END Middle panel############
+#########################################
+
+
+#########################################
+####START lower left connections ########
+#########################################
+#par(fig=c(x.pos[5],x.pos[7],y.pos[6],y.pos[16]), new=T)
+#par(fig=c(x.pos[12],x.pos[14],y.pos[2],y.pos[12]), new=T)
+par(fig=c(x.pos[5],x.pos[7],y.pos[2],y.pos[7]), new=T)
+         
+ 
+unitsize <- nrow(totxvi.cn.data)/(y.pos[7]-y.pos[2])
+unitsize
+
+boxsize <- y.pos[7]-y.pos[2]
+boxsize
+
+#lowerlimit <- 0.5+floor(unitsize*boxsize)
+#lowerlimit
+lowerlimit <- 0.5
+lowerlimit
+
+#upperlimit <- 0.5-unitsize*boxsize+floor(unitsize*boxsize)
+#upperlimit
+upperlimit <- unitsize*boxsize+0.5
+upperlimit
+
+geunitsize <- (y.pos[7]-y.pos[2])/nrow(xv.ge.data)
+
+#offset <- floor(unitsize*boxsize)-nrow(totxvi.cn.data)
+#offset
+offset <- unitsize*((y.pos[12]-y.pos[2])-(y.pos[12]-y.pos[6]))
+offset
+
+multi.unit <- (upperlimit-lowerlimit)/(boxsize/geunitsize)
+multi.unit
+
+
+plot(0,0, xlim=c(0,1), ylim=c(lowerlimit, upperlimit), axes=FALSE, xaxs="i", yaxs="i", type="n")
+
+myleftcon <- sample (1:nrow(xv.ge.data), nrow(xv.ge.data)-5, replace=TRUE)
+myrightcon <- sample(1:nrow(totxvi.cn.data), nrow(xv.ge.data)-5, replace=TRUE)
+numcon <- (myleftcon) + (myrightcon)
+
+#for (i in 1:nrow(snp.ge.result)){
+#for (i in 1:length(myleftcon)){
+
+#num.con <- sample((nrow(xv.ge.data)-10):nrow(xv.ge.data), 1)
+#   lines (c(0,1), c(snp.ge.result[i,"snporder"],(snp.ge.result[i,"georder"]-0.5)*multi.unit+lowerlimit+offset), col=rgb(0,1,0,0.75))
+   #lines (c(1,0), c(myrightcon[i],(myleftcon[i]-0.5)*multi.unit+lowerlimit+offset), col=rgb(1,0,1,0.75))
+
+#}
+
+#lines (c(0,1), c(1, (1-0.5)*multi.unit+lowerlimit+offset), col="black")
+#for (i in 1:nrow(snp.ge.result)){
+  # lines (c(0,1), c(cnge.connect.sig[i,"cnorder"],(cnge.connect.sig[i,"georder"]-0.5)*multi.unit+lowerlimit+offset), col=rgb(1,0,1,0.75))
+#}
+
+##Drawing cis lines after trans lines will help them show over top of the many trans connections
+cnge.connect.sig.cis <- subset(cnge.connect.sig, cnge.connect.sig$cistrans == "CIS")
+cnge.connect.sig.trans <- subset(cnge.connect.sig, cnge.connect.sig$cistrans == "TRANS")
+#for (i in 1:nrow(snp.ge.result)){
+  # lines (c(0,1), c(cnge.connect.sig[i,"cnorder"],(cnge.connect.sig[i,"georder"]-0.5)*multi.unit+lowerlimit+offset), col=rgb(1,0,1,0.75))
+#}
+
+##Drawing cis lines after trans lines will help them show over top of the many trans connections
+cnge.connect.sig.cis <- subset(cnge.connect.sig, cnge.connect.sig$cistrans == "CIS")
+cnge.connect.sig.trans <- subset(cnge.connect.sig, cnge.connect.sig$cistrans == "TRANS")
+if(nrow(cnge.connect.sig.trans) >0 ){
+for (i in 1:nrow(cnge.connect.sig.trans)){
+if (drug == "PRED"){
+ lines (c(1,0), c(cnge.connect.sig.trans[i,"cnorder"],(cnge.connect.sig.trans[i,"georder"]-0.5)*multi.unit+lowerlimit+offset),col= rgb(0,1,1,0.5))
+}else{
+ lines (c(1,0), c(cnge.connect.sig.trans[i,"cnorder"],(cnge.connect.sig.trans[i,"georder"]-0.5)*multi.unit+lowerlimit+offset),col= rgb(0,1,1,0.5))
+}
+}
+}
+if(nrow(cnge.connect.sig.cis) >0 ){
+for (i in 1:nrow(cnge.connect.sig.cis)){
+if (drug == "PRED"){
+ lines (c(1,0), c(cnge.connect.sig.cis[i,"cnorder"],(cnge.connect.sig.cis[i,"georder"]-0.5)*multi.unit+lowerlimit+offset),col= rgb(1,0,1,1))
+}else{
+ lines (c(1,0), c(cnge.connect.sig.cis[i,"cnorder"],(cnge.connect.sig.cis[i,"georder"]-0.5)*multi.unit+lowerlimit+offset),col= rgb(1,0,1,0.5))
+}
+}
+}
+#for (i in 1:nrow(cnge.connect.sig)){
+#if (drug == "PRED"){
+# lines (c(1,0), c(cnge.connect.sig[i,"cnorder"],(cnge.connect.sig[i,"georder"]-0.5)*multi.unit+lowerlimit+offset),col=ifelse(cnge.connect.sig$cistrans[i] =="CIS" ,rgb(1,0,1,1), rgb(0.73,1,1,0.05)))
+#}else{
+ #lines (c(1,0), c(cnge.connect.sig[i,"cnorder"],(cnge.connect.sig[i,"georder"]-0.5)*multi.unit+lowerlimit+offset),col=ifelse(cnge.connect.sig$cistrans[i] =="CIS" ,rgb(1,0,1,1), rgb(0.73,1,1,0.5)))
+#}
+#}
+#lty= ifelse(cnge.connect.sig$cistrans[i] =="CIS",1,3
+#lines(c(1,0),c(0.5,762.4802), col = "red")
+#lines(c(1,0),c(300,(56-0.5)*multi.unit+lowerlimit+offset), col = "green", lty = "dotted")
+#########################################
+####END lower left connections ##########
+#########################################
+
+
+
+@
+
+
+
+\end{document}

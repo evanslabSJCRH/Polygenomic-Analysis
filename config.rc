@@ -1,0 +1,27 @@
+#Configuration file
+project="$user"
+execbin="/home/rautry/drworkflow_NODUTCH/bin"
+queue="standard"
+lmqueue="standard"
+lmhost="uv02"
+priority="100"
+wd="workflow_results_final"
+drugs=("PRED")
+drugs=("PRED" "LASP")
+drugs=( "6MP" "6TG" )
+drugs=( "PRED" "DEX" "LASP" "6MP" "6TG" "VCR" "CYTU" )
+runsnp="TRUE"
+runcn="TRUE"
+runge="TRUE"
+runmir="TRUE"
+runmeth="TRUE"
+rungemir="TRUE"
+rungemeth="TRUE"
+rungesnp="TRUE"
+rungecn="TRUE"
+runmirsnp="TRUE"
+runfigure="TRUE"
+#runbabyfigure="TRUE"
+#runonlybabyfigure="TRUE"
+runonlyfigure="TRUE"
+runpackageresult="TRUE"
