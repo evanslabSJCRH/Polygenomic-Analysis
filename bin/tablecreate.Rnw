@@ -69,19 +69,19 @@ ge.lc50.result.b <- subset(ge.lc50.result, ge.lc50.result$p.b < ge.cutoff)
 
 ge.lc50.result.b <- ge.lc50.result.b[order(ge.lc50.result.b$p.b),]
 
-#if (drug %in% c("PRED", "LASP", "VCR", "6MP", "6TG")){
- # ge.lc50.result.b <- ge.lc50.result.b[,c("Gene.Symbol", "Probe.Set.ID", "p.b", "stat.b", "totxv.lm.p.b", "totxv.lm.stat.b", "totxvi.lm.p.b", "totxvi.lm.stat.b", "dutch.lm.p.b", "dutch.lm.stat.b")]
- # colnames (ge.lc50.result.b) <- c("Gene Symbol", "Probe Set ID", "p-value", "Estimate",  "TOTXV p-value", "TOTXV Estimate", "TOTXVI p-value", "TOTXVI Estimate", "COALL p-value", "COALL Estimate")
- # ge.lc50.result.b <- xtable (ge.lc50.result.b, display=c("s", "s", "s", "e", "f", "e", "f", "e", "f", "e", "f"), caption=paste("Gene expression significantly related to ", long.drugname, " LC50", sep=""), label="getable")
-#}
+if (drug %in% c("PRED", "LASP", "VCR", "6MP", "6TG")){
+  ge.lc50.result.b <- ge.lc50.result.b[,c("Gene.Symbol", "Probe.Set.ID", "p.b", "stat.b", "totxv.lm.p.b", "totxv.lm.stat.b", "totxvi.lm.p.b", "totxvi.lm.stat.b", "dutch.lm.p.b", "dutch.lm.stat.b")]
+  colnames (ge.lc50.result.b) <- c("Gene Symbol", "Probe Set ID", "p-value", "Estimate",  "TOTXV p-value", "TOTXV Estimate", "TOTXVI p-value", "TOTXVI Estimate", "COALL p-value", "COALL Estimate")
+  ge.lc50.result.b <- xtable (ge.lc50.result.b, display=c("s", "s", "s", "e", "f", "e", "f", "e", "f", "e", "f"), caption=paste("Gene expression significantly related to ", long.drugname, " LC50", sep=""), label="getable")
+}
 
-#if (!(drug %in% c("PRED", "LASP", "VCR", "6MP","6TG"))){
+if (!(drug %in% c("PRED", "LASP", "VCR", "6MP","6TG"))){
   ge.lc50.result.b <- ge.lc50.result.b[,c("Gene.Symbol", "Probe.Set.ID", "p.b", "stat.b", "totxv.lm.p.b", "totxv.lm.stat.b", "totxvi.lm.p.b", "totxvi.lm.stat.b")]
 
   colnames (ge.lc50.result.b) <- c("Gene Symbol", "Probe Set ID", "p-value", "Estimate",  "TOTXV p-value", "TOTXV Estimate", "TOTXVI p-value", "TOTXVI Estimate")
   ge.lc50.result.b <- xtable (ge.lc50.result.b, display=c("s", "s", "s", "e", "f", "e", "f", "e", "f"), caption=paste("Gene expression significantly related to ", long.drugname, " LC50", sep=""), label="getable")
 
-#}
+}
 
 print (ge.lc50.result.b, floating = FALSE, caption.placement="top", include.rownames=FALSE, tabular.environment = "longtable", size="\\tiny", add.to.row=addtorow, hline.after=c(-1))
 
@@ -159,7 +159,6 @@ write.csv(meth.lc50.result.b, file="meth.lc50.result.b.csv")
 
 \pagebreak[4]
 
-
 <<preparesnptable, echo=FALSE, results=tex>>=
 snp.lc50.result <- read.delim("snp_lc50.tsv", as.is=TRUE, stringsAsFactors=FALSE)
 
@@ -177,10 +176,10 @@ snp.lc50.result$min.count <- apply (snp.lc50.result[,c("xv.01", "xv.03", "xvi.01
 
 snp.lc50.result <- snp.lc50.result[snp.lc50.result$min.count > 0,]
 
-snp.anno <- read.csv("/home/rautry/drworkflow_data/combined_gene_snps_201601.csv", header =TRUE, stringsAsFactors =FALSE)
+snp.anno <- read.csv("/home/pgx/data/patient/snpchip/cnv/old/combined_gene_snps_201601.csv", header =TRUE, stringsAsFactors =FALSE)
 
-#snp.anno <- read.csv("/home/rautry/data/GenomeWideSNP_6.na35.annot.csv", header =TRUE, stringsAsFactors =FALSE)
-head(snp.anno)
+
+
 
 #snp.lc50.result <- merge (snp.lc50.result, snp.anno)
 
